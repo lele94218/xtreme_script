@@ -8,217 +8,217 @@
 #include <string.h>
 #include <ctype.h>
 
-    // ---- Filename --------------------------------------------------------------------------
+// ---- Filename --------------------------------------------------------------------------
 
-        #define MAX_FILENAME_SIZE           2048        // Maximum filename length
+#define MAX_FILENAME_SIZE           2048        // Maximum filename length
 
-        #define SOURCE_FILE_EXT             ".XASM"     // Extension of a source code file
-        #define EXEC_FILE_EXT               ".XSE"      // Extension of an executable code file
+#define SOURCE_FILE_EXT             ".XASM"     // Extension of a source code file
+#define EXEC_FILE_EXT               ".XSE"      // Extension of an executable code file
 
-    // ---- Source Code -----------------------------------------------------------------------
+// ---- Source Code -----------------------------------------------------------------------
 
-        #define MAX_SOURCE_CODE_SIZE        65536       // Maximum number of lines in source
-                                                        // code
-        #define MAX_SOURCE_LINE_SIZE        4096        // Maximum source line length
+#define MAX_SOURCE_CODE_SIZE        65536       // Maximum number of lines in source
+// code
+#define MAX_SOURCE_LINE_SIZE        4096        // Maximum source line length
 
-    // ---- ,XSE Header -----------------------------------------------------------------------
+// ---- ,XSE Header -----------------------------------------------------------------------
 
-        #define XSE_ID_STRING               "XSE0"      // Written to the file to state it's
-                                                        // validity
+#define XSE_ID_STRING               "XSE0"      // Written to the file to state it's
+// validity
 
-        #define VERSION_MAJOR               0           // Major version number
-        #define VERSION_MINOR               4           // Minor version number
+#define VERSION_MAJOR               0           // Major version number
+#define VERSION_MINOR               4           // Minor version number
 
-    // ---- Lexer -----------------------------------------------------------------------------
+// ---- Lexer -----------------------------------------------------------------------------
 
-        #define MAX_LEXEME_SIZE             256         // Maximum lexeme size
+#define MAX_LEXEME_SIZE             256         // Maximum lexeme size
 
-        #define LEX_STATE_NO_STRING         0           // Lexemes are scanned as normal
-        #define LEX_STATE_IN_STRING         1           // Lexemes are scanned as strings
-        #define LEX_STATE_END_STRING        2           // Lexemes are scanned as normal, and the
-                                                        // next state is LEXEME_STATE_NOSTRING
+#define LEX_STATE_NO_STRING         0           // Lexemes are scanned as normal
+#define LEX_STATE_IN_STRING         1           // Lexemes are scanned as strings
+#define LEX_STATE_END_STRING        2           // Lexemes are scanned as normal, and the
+// next state is LEXEME_STATE_NOSTRING
 
-        #define TOKEN_TYPE_INT              0           // An integer literal
-        #define TOKEN_TYPE_FLOAT            1           // An floating-point literal
-        #define TOKEN_TYPE_STRING           2           // An string literal
-        #define TOKEN_TYPE_QUOTE            3           // A double-quote
-        #define TOKEN_TYPE_IDENT            4           // An identifier
-        #define TOKEN_TYPE_COLON            5           // A colon
-        #define TOKEN_TYPE_OPEN_BRACKET     6           // An openening bracket
-        #define TOKEN_TYPE_CLOSE_BRACKET    7           // An closing bracket
-        #define TOKEN_TYPE_COMMA            8           // A comma
-        #define TOKEN_TYPE_OPEN_BRACE       9           // An openening curly brace
-        #define TOKEN_TYPE_CLOSE_BRACE      10          // An closing curly brace
-        #define TOKEN_TYPE_NEWLINE          11          // A newline
+#define TOKEN_TYPE_INT              0           // An integer literal
+#define TOKEN_TYPE_FLOAT            1           // An floating-point literal
+#define TOKEN_TYPE_STRING           2           // An string literal
+#define TOKEN_TYPE_QUOTE            3           // A double-quote
+#define TOKEN_TYPE_IDENT            4           // An identifier
+#define TOKEN_TYPE_COLON            5           // A colon
+#define TOKEN_TYPE_OPEN_BRACKET     6           // An openening bracket
+#define TOKEN_TYPE_CLOSE_BRACKET    7           // An closing bracket
+#define TOKEN_TYPE_COMMA            8           // A comma
+#define TOKEN_TYPE_OPEN_BRACE       9           // An openening curly brace
+#define TOKEN_TYPE_CLOSE_BRACE      10          // An closing curly brace
+#define TOKEN_TYPE_NEWLINE          11          // A newline
 
-		#define TOKEN_TYPE_INSTR			12			// An instruction
+#define TOKEN_TYPE_INSTR			12			// An instruction
 
-        #define TOKEN_TYPE_SETSTACKSIZE     13          // The SetStackSize directive
-        #define TOKEN_TYPE_VAR              14          // The Var/Var [] directives
-        #define TOKEN_TYPE_FUNC             15          // The Func directives
-        #define TOKEN_TYPE_PARAM            16          // The Param directives
-        #define TOKEN_TYPE_REG_RETVAL       17          // The _RetVal directives
+#define TOKEN_TYPE_SETSTACKSIZE     13          // The SetStackSize directive
+#define TOKEN_TYPE_VAR              14          // The Var/Var [] directives
+#define TOKEN_TYPE_FUNC             15          // The Func directives
+#define TOKEN_TYPE_PARAM            16          // The Param directives
+#define TOKEN_TYPE_REG_RETVAL       17          // The _RetVal directives
 
-        #define TOKEN_TYPE_INVALID          18          // Error code for invalid tokens
-        #define END_OF_TOKEN_STREAM         19          // The end of the stream has been
-                                                        // reached
+#define TOKEN_TYPE_INVALID          18          // Error code for invalid tokens
+#define END_OF_TOKEN_STREAM         19          // The end of the stream has been
+// reached
 
-        #define MAX_IDENT_SIZE              256        // Maximum identifier size
+#define MAX_IDENT_SIZE              256        // Maximum identifier size
 
-    // ---- Instruction Lookup Table ----------------------------------------------------------
+// ---- Instruction Lookup Table ----------------------------------------------------------
 
-        #define MAX_INSTR_LOOKUP_COUNT      256         // The maximum number of instructions
-                                                        // the lookup table will hold
-        #define MAX_INSTR_MNEMONIC_SIZE     16          // Maximum size of an instruction
-                                                        // mnemonic's string
+#define MAX_INSTR_LOOKUP_COUNT      256         // The maximum number of instructions
+// the lookup table will hold
+#define MAX_INSTR_MNEMONIC_SIZE     16          // Maximum size of an instruction
+// mnemonic's string
 
-        // ---- Instruction Opcodes -----------------------------------------------------------
+// ---- Instruction Opcodes -----------------------------------------------------------
 
-            #define INSTR_MOV               0
+#define INSTR_MOV               0
 
-            #define INSTR_ADD               1
-            #define INSTR_SUB               2
-            #define INSTR_MUL               3
-            #define INSTR_DIV               4
-            #define INSTR_MOD               5
-            #define INSTR_EXP               6
-            #define INSTR_NEG               7
-            #define INSTR_INC               8
-            #define INSTR_DEC               9
+#define INSTR_ADD               1
+#define INSTR_SUB               2
+#define INSTR_MUL               3
+#define INSTR_DIV               4
+#define INSTR_MOD               5
+#define INSTR_EXP               6
+#define INSTR_NEG               7
+#define INSTR_INC               8
+#define INSTR_DEC               9
 
-            #define INSTR_AND               10
-            #define INSTR_OR                11
-            #define INSTR_XOR               12
-            #define INSTR_NOT               13
-            #define INSTR_SHL               14
-            #define INSTR_SHR               15
+#define INSTR_AND               10
+#define INSTR_OR                11
+#define INSTR_XOR               12
+#define INSTR_NOT               13
+#define INSTR_SHL               14
+#define INSTR_SHR               15
 
-            #define INSTR_CONCAT            16
-            #define INSTR_GETCHAR           17
-            #define INSTR_SETCHAR           18
+#define INSTR_CONCAT            16
+#define INSTR_GETCHAR           17
+#define INSTR_SETCHAR           18
 
-            #define INSTR_JMP               19
-            #define INSTR_JE                20
-            #define INSTR_JNE               21
-            #define INSTR_JG                22
-            #define INSTR_JL                23
-            #define INSTR_JGE               24
-            #define INSTR_JLE               25
+#define INSTR_JMP               19
+#define INSTR_JE                20
+#define INSTR_JNE               21
+#define INSTR_JG                22
+#define INSTR_JL                23
+#define INSTR_JGE               24
+#define INSTR_JLE               25
 
-            #define INSTR_PUSH              26
-            #define INSTR_POP               27
+#define INSTR_PUSH              26
+#define INSTR_POP               27
 
-            #define INSTR_CALL              28
-            #define INSTR_RET               29
-            #define INSTR_CALLHOST          30
+#define INSTR_CALL              28
+#define INSTR_RET               29
+#define INSTR_CALLHOST          30
 
-            #define INSTR_PAUSE             31
-            #define INSTR_EXIT              32
+#define INSTR_PAUSE             31
+#define INSTR_EXIT              32
 
-        // ---- Operand Type Bitfield Flags ---------------------------------------------------
+// ---- Operand Type Bitfield Flags ---------------------------------------------------
 
-            // The following constants are used as flags into an operand type bit field, hence
-            // their values being increasing powers of 2.
+// The following constants are used as flags into an operand type bit field, hence
+// their values being increasing powers of 2.
 
-            #define OP_FLAG_TYPE_INT        1           // Integer literal value
-            #define OP_FLAG_TYPE_FLOAT      2           // Floating-point literal value
-            #define OP_FLAG_TYPE_STRING     4           // Integer literal value
-            #define OP_FLAG_TYPE_MEM_REF    8           // Memory reference (variable or array
-                                                        // index, both absolute and relative)
-            #define OP_FLAG_TYPE_LINE_LABEL 16          // Line label (used for jumps)
-            #define OP_FLAG_TYPE_FUNC_NAME  32          // Function table index (used for Call)
-            #define OP_FLAG_TYPE_HOST_API_CALL  64      // Host API Call table index (used for
-                                                        // CallHost)
-            #define OP_FLAG_TYPE_REG        128         // Register
+#define OP_FLAG_TYPE_INT        1           // Integer literal value
+#define OP_FLAG_TYPE_FLOAT      2           // Floating-point literal value
+#define OP_FLAG_TYPE_STRING     4           // Integer literal value
+#define OP_FLAG_TYPE_MEM_REF    8           // Memory reference (variable or array
+// index, both absolute and relative)
+#define OP_FLAG_TYPE_LINE_LABEL 16          // Line label (used for jumps)
+#define OP_FLAG_TYPE_FUNC_NAME  32          // Function table index (used for Call)
+#define OP_FLAG_TYPE_HOST_API_CALL  64      // Host API Call table index (used for
+// CallHost)
+#define OP_FLAG_TYPE_REG        128         // Register
 
-    // ---- Assembled Instruction Stream ------------------------------------------------------
+// ---- Assembled Instruction Stream ------------------------------------------------------
 
-        #define OP_TYPE_INT                 0           // Integer literal value
-        #define OP_TYPE_FLOAT               1           // Floating-point literal value
-        #define OP_TYPE_STRING_INDEX        2           // String literal value
-        #define OP_TYPE_ABS_STACK_INDEX     3           // Absolute array index
-        #define OP_TYPE_REL_STACK_INDEX     4           // Relative array index
-        #define OP_TYPE_INSTR_INDEX         5           // Instruction index
-        #define OP_TYPE_FUNC_INDEX          6           // Function index
-        #define OP_TYPE_HOST_API_CALL_INDEX 7           // Host API call index
-        #define OP_TYPE_REG                 8           // Register
+#define OP_TYPE_INT                 0           // Integer literal value
+#define OP_TYPE_FLOAT               1           // Floating-point literal value
+#define OP_TYPE_STRING_INDEX        2           // String literal value
+#define OP_TYPE_ABS_STACK_INDEX     3           // Absolute array index
+#define OP_TYPE_REL_STACK_INDEX     4           // Relative array index
+#define OP_TYPE_INSTR_INDEX         5           // Instruction index
+#define OP_TYPE_FUNC_INDEX          6           // Function index
+#define OP_TYPE_HOST_API_CALL_INDEX 7           // Host API call index
+#define OP_TYPE_REG                 8           // Register
 
-	// ---- Functions -------------------------------------------------------------------------
+// ---- Functions -------------------------------------------------------------------------
 
-		#define MAIN_FUNC_NAME				"_MAIN"		// _Main ()'s name
+#define MAIN_FUNC_NAME				"_MAIN"		// _Main ()'s name
 
-	// ---- Error Strings ---------------------------------------------------------------------
+// ---- Error Strings ---------------------------------------------------------------------
 
-		// The following macros are used to represent assembly-time error strings
+// The following macros are used to represent assembly-time error strings
 
-		#define ERROR_MSSG_INVALID_INPUT	\
-			"Invalid input"
+#define ERROR_MSSG_INVALID_INPUT	\
+	"Invalid input"
 
-		#define ERROR_MSSG_LOCAL_SETSTACKSIZE	\
-			"SetStackSize can only appear in the global scope"
+#define ERROR_MSSG_LOCAL_SETSTACKSIZE	\
+	"SetStackSize can only appear in the global scope"
 
-		#define ERROR_MSSG_INVALID_STACK_SIZE	\
-			"Invalid stack size"
+#define ERROR_MSSG_INVALID_STACK_SIZE	\
+	"Invalid stack size"
 
-		#define ERROR_MSSG_MULTIPLE_SETSTACKSIZES	\
-			"Multiple instances of SetStackSize illegal"
+#define ERROR_MSSG_MULTIPLE_SETSTACKSIZES	\
+	"Multiple instances of SetStackSize illegal"
 
-		#define ERROR_MSSG_IDENT_EXPECTED	\
-			"Identifier expected"
+#define ERROR_MSSG_IDENT_EXPECTED	\
+	"Identifier expected"
 
-		#define ERROR_MSSG_INVALID_ARRAY_SIZE	\
-			"Invalid array size"
+#define ERROR_MSSG_INVALID_ARRAY_SIZE	\
+	"Invalid array size"
 
-		#define ERROR_MSSG_IDENT_REDEFINITION	\
-			"Identifier redefinition"
+#define ERROR_MSSG_IDENT_REDEFINITION	\
+	"Identifier redefinition"
 
-		#define ERROR_MSSG_UNDEFINED_IDENT	\
-			"Undefined identifier"
+#define ERROR_MSSG_UNDEFINED_IDENT	\
+	"Undefined identifier"
 
-		#define ERROR_MSSG_NESTED_FUNC	\
-			"Nested functions illegal"
+#define ERROR_MSSG_NESTED_FUNC	\
+	"Nested functions illegal"
 
-		#define ERROR_MSSG_FUNC_REDEFINITION	\
-			"Function redefinition"
+#define ERROR_MSSG_FUNC_REDEFINITION	\
+	"Function redefinition"
 
-		#define ERROR_MSSG_UNDEFINED_FUNC	\
-			"Undefined function"
+#define ERROR_MSSG_UNDEFINED_FUNC	\
+	"Undefined function"
 
-		#define ERROR_MSSG_GLOBAL_PARAM	\
-			"Parameters can only appear inside functions"
+#define ERROR_MSSG_GLOBAL_PARAM	\
+	"Parameters can only appear inside functions"
 
-		#define ERROR_MSSG_MAIN_PARAM	\
-			"_Main () function cannot accept parameters"
+#define ERROR_MSSG_MAIN_PARAM	\
+	"_Main () function cannot accept parameters"
 
-		#define ERROR_MSSG_GLOBAL_LINE_LABEL	\
-			"Line labels can only appear inside functions"
+#define ERROR_MSSG_GLOBAL_LINE_LABEL	\
+	"Line labels can only appear inside functions"
 
-		#define ERROR_MSSG_LINE_LABEL_REDEFINITION	\
-			"Line label redefinition"
+#define ERROR_MSSG_LINE_LABEL_REDEFINITION	\
+	"Line label redefinition"
 
-		#define ERROR_MSSG_UNDEFINED_LINE_LABEL	\
-			"Undefined line label"
+#define ERROR_MSSG_UNDEFINED_LINE_LABEL	\
+	"Undefined line label"
 
-		#define ERROR_MSSG_GLOBAL_INSTR	\
-			"Instructions can only appear inside functions"
+#define ERROR_MSSG_GLOBAL_INSTR	\
+	"Instructions can only appear inside functions"
 
-		#define ERROR_MSSG_INVALID_INSTR	\
-			"Invalid instruction"
+#define ERROR_MSSG_INVALID_INSTR	\
+	"Invalid instruction"
 
-		#define ERROR_MSSG_INVALID_OP	\
-			"Invalid operand"
+#define ERROR_MSSG_INVALID_OP	\
+	"Invalid operand"
 
-		#define ERROR_MSSG_INVALID_STRING	\
-			"Invalid string"
+#define ERROR_MSSG_INVALID_STRING	\
+	"Invalid string"
 
-		#define ERROR_MSSG_INVALID_ARRAY_NOT_INDEXED	\
-			"Arrays must be indexed"
+#define ERROR_MSSG_INVALID_ARRAY_NOT_INDEXED	\
+	"Arrays must be indexed"
 
-		#define ERROR_MSSG_INVALID_ARRAY	\
-			"Invalid array"
+#define ERROR_MSSG_INVALID_ARRAY	\
+	"Invalid array"
 
-		#define ERROR_MSSG_INVALID_ARRAY_INDEX	\
-			"Invalid array index"
+#define ERROR_MSSG_INVALID_ARRAY_INDEX	\
+	"Invalid array index"
 
 
 
@@ -240,7 +240,7 @@ typedef struct _Op
 	};
 	int iOffsetIndex;
 }
-	Op;
+Op;
 
 typedef struct _Instr
 {
@@ -248,7 +248,7 @@ typedef struct _Instr
 	int iOpCount;
 	Op * pOpList;
 }
-	Instr;
+Instr;
 
 
 // Script header data, data
@@ -259,14 +259,14 @@ typedef struct _ScriptHeader
 	int iIsMainFuncPresent;
 	int iMainFuncIndex;
 }
-	ScriptHeader;
+ScriptHeader;
 
 typedef struct _LinkedListNode
 {
 	void * pData;
 	_LinkedListNode * pNext;
 }
-	LinkedListNode;
+LinkedListNode;
 
 typedef struct _LinkedList
 {
@@ -274,7 +274,7 @@ typedef struct _LinkedList
 				   *pTail;
 	int iNodeCount;
 }
-	LinkedList;
+LinkedList;
 
 typedef struct _FuncNode
 {
@@ -284,7 +284,7 @@ typedef struct _FuncNode
 	int iParamCount;
 	int iLocalDataSize;
 }
-	FuncNode;
+FuncNode;
 
 typedef struct _LabelNode
 {
@@ -293,7 +293,7 @@ typedef struct _LabelNode
 	int iTargetIndex;
 	int iFuncIndex;
 }
-	LabelNode;
+LabelNode;
 
 typedef int OpTypes;
 
@@ -304,7 +304,7 @@ typedef struct _InstrLookup
 	int iOpCount;
 	OpTypes * OpList;
 }
-	InstrLookup;
+InstrLookup;
 
 typedef struct _SymbolNode
 {
@@ -314,7 +314,7 @@ typedef struct _SymbolNode
 	int iStackIndex;
 	int iFuncIndex;
 }
-	SymbolNode;
+SymbolNode;
 
 typedef int Token;
 
@@ -330,7 +330,7 @@ typedef struct _Lexer
 
 	int iCurrLexState;
 }
-	Lexer;
+Lexer;
 
 // ---- Global Variables ----
 Lexer g_Lexer;
@@ -432,7 +432,7 @@ void FreeLinkedList ( LinkedList * pList )
 	{
 		LinkedListNode * pCurrNode,
 					   * pNextNode;
-		
+
 		pCurrNode = pList->pHead;
 
 		while ( true )
@@ -461,7 +461,7 @@ int AddString( LinkedList * pList, char * pstrString )
 	{
 		if ( strcmp ( ( char * ) pNode->pData, pstrString ) == 0 )
 			return iCurrNode;
-		
+
 		pNode = pNode->pNext;
 	}
 
@@ -500,9 +500,9 @@ FuncNode * GetFuncByName ( char * pstrName )
 {
 	if ( ! g_FuncTable.iNodeCount )
 		return NULL;
-	
+
 	LinkedListNode * pCurrNode = g_FuncTable.pHead;
-	
+
 	for (int iCurrNode = 0; iCurrNode < g_FuncTable.iNodeCount; ++ iCurrNode)
 	{
 		FuncNode * pCurrFunc = ( FuncNode * ) pCurrNode->pData;
@@ -539,7 +539,7 @@ SymbolNode * GetSymbolByIdent ( char * pstrIdent, int iFuncIndex )
 {
 	if ( ! g_SymbolTable.iNodeCount )
 		return NULL;
-	
+
 	LinkedListNode * pCurrNode = g_SymbolTable.pHead;
 
 	for ( int iCurrNode = 0; iCurrNode < g_SymbolTable.iNodeCount; ++ iCurrNode )
@@ -560,7 +560,7 @@ SymbolNode * GetSymbolByIdent ( char * pstrIdent, int iFuncIndex )
 int GetStackIndexByIndent ( char * pstrIdent, int iFuncIndex )
 {
 	SymbolNode * pSymbol = GetSymbolByIdent ( pstrIdent, iFuncIndex );
-	
+
 	return pSymbol->iStackIndex;
 }
 
@@ -628,7 +628,7 @@ int AddInstrLookup ( char * pstrMnemonic, int iOpcode, int iOpCount )
 	int iReturnInstrIndex = iInstrIndex;
 
 	++ iInstrIndex;
-	
+
 	return iReturnInstrIndex;
 }
 
@@ -649,7 +649,7 @@ int GetInstrByMnemonic ( char * pstrMnemonic, InstrLookup * pInstr )
 			return true;
 		}
 	}
-	
+
 	return false;
 }
 
@@ -715,9 +715,9 @@ int IsCharNumeric (char cChar)
 int IsCharIdent (char cChar)
 {
 	if ((cChar >= '0' && cChar <= '9') ||
-		(cChar >= 'A' && cChar <= 'Z') ||
-		(cChar >= 'a' && cChar <= 'z') ||
-		cChar == '_')
+			(cChar >= 'A' && cChar <= 'Z') ||
+			(cChar >= 'a' && cChar <= 'z') ||
+			cChar == '_')
 		return true;
 	else
 		return false;
@@ -726,8 +726,8 @@ int IsCharIdent (char cChar)
 int IsCharDelimiter (char cChar)
 {
 	if (cChar == ':' || cChar == ',' || cChar == '"' ||
-		cChar == '[' || cChar == ']' || cChar == '{' ||
-		cChar == '}' || IsCharWhitespace (cChar) || cChar == '\n')
+			cChar == '[' || cChar == ']' || cChar == '{' ||
+			cChar == '}' || IsCharWhitespace (cChar) || cChar == '\n')
 		return true;
 	else
 		return false;
@@ -782,7 +782,7 @@ int IsStringWhitespace (char * pstrString)
 		if (!IsCharWhitespace (pstrString[iCurrCharIndex]) && 
 				pstrString[iCurrCharIndex != '\n'])
 			return false;
-		return true;
+	return true;
 }
 
 int IsStringIdent (char * pstrString)
@@ -817,11 +817,11 @@ int IsStringInteger (char * pstrString)
 		if (!IsCharNumeric (pstrString[iCurrCharIndex]) && 
 				!(pstrString[iCurrCharIndex] == '-'))
 			return false;
-	
+
 	for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
 		if (pstrString[iCurrCharIndex == '-'])
 			return false;
-	
+
 	return true;
 }
 
@@ -916,7 +916,7 @@ Token GetNextToken ()
 
 			if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1] == '"')
 				break;
-			
+
 			++ g_Lexer.iIndex1;
 		}
 
@@ -929,7 +929,7 @@ Token GetNextToken ()
 			if (IsCharDelimiter (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
 						[g_Lexer.iIndex1]))
 				break;	
-			
+
 			++ g_Lexer.iIndex1;
 		}
 	}
@@ -948,7 +948,7 @@ Token GetNextToken ()
 
 		g_Lexer.pstrCurrLexeme[iCurrDestIndex] = 
 			g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex];
-		
+
 		++ iCurrDestIndex;
 	}
 
@@ -997,7 +997,7 @@ Token GetNextToken ()
 			case '[':
 				g_Lexer.CurrToken = TOKEN_TYPE_OPEN_BRACKET;
 				break;
-			
+
 			case ']':
 				g_Lexer.CurrToken = TOKEN_TYPE_CLOSE_BRACKET;
 				break;
@@ -1018,7 +1018,7 @@ Token GetNextToken ()
 
 	if (IsStringInteger (g_Lexer.pstrCurrLexeme))
 		g_Lexer.CurrToken = TOKEN_TYPE_INT;
-	
+
 	if (IsStringFloat (g_Lexer.pstrCurrLexeme))
 		g_Lexer.CurrToken = TOKEN_TYPE_FLOAT;
 
@@ -1036,7 +1036,7 @@ Token GetNextToken ()
 
 	if (strcmp(g_Lexer.pstrCurrLexeme, "_RETVAL") == 0)
 		g_Lexer.CurrToken = TOKEN_TYPE_REG_RETVAL;
-	
+
 	InstrLookup Instr;
 
 	if (GetInstrByMnemonic(g_Lexer.pstrCurrLexeme, & Instr))
@@ -1044,4 +1044,4 @@ Token GetNextToken ()
 
 	return g_Lexer.CurrToken;
 }
-				
+
