@@ -14,14 +14,6 @@
 
 // ---- Data Structures ----
 
-typedef struct _Instr
-{
-	int iOpcode;
-	int iOpCount;
-	Op * pOpList;
-}
-	Instr;
-
 typedef struct _Op
 {
 	int iType;
@@ -39,6 +31,15 @@ typedef struct _Op
 	int iOffsetIndex;
 }
 	Op;
+
+typedef struct _Instr
+{
+	int iOpcode;
+	int iOpCount;
+	Op * pOpList;
+}
+	Instr;
+
 
 // Script header data, data
 typedef struct _ScriptHeader
@@ -425,6 +426,202 @@ int GetInstrByMnemonic ( char * pstrMnemonic, InstrLooup * pInstr )
 	
 	return false;
 }
+
+void StripComments (char * pstrSourceLine)
+{
+	unsigned int iCurrCharIndex;
+	int iInString;
+
+	iInString = 0;
+	for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrSourceLine) - 1; ++ iCurrCharIndex)
+	{
+		if (pstrSourceLine[iCurrCharIndex] == '"')
+			if (iInString)
+				iInString = 0;
+			else
+				iInString = 1;
+
+		if (pstrSourceLine[iCurrCharIndex] == ';')
+		{
+			if (!iInString)
+			{
+				pstrSourceLine[iCurrCharIndex] = '\n';
+				pstrSourceLine[iCurrCharIndex + 1] = '\0';
+				break;
+			}
+		}
+	}
+}
+
+int IsCharWhitespace (char cChar)
+{
+	if (cChar == ' ' || cChar == '\t')
+		return true;
+	else
+		return false;
+}
+
+int IsCharNumeric (char cChar)
+{
+	if (cChar >= '0' && cChar <= '9')
+		return true;
+	else
+		return false;
+}
+
+int IsCharIdent (char cChar)
+{
+	if ((cChar >= '0' && cChar <= '9') ||
+		(cChar >= 'A' && cChar <= 'Z') ||
+		(cChar >= 'a' && cChar <= 'z') ||
+		cChar == '_')
+		return true;
+	else
+		return false;
+}
+
+int IsCharDelimiter (char cChar)
+{
+	if (cChar == ':' || cChar == ',' || cChar == '"' ||
+		cChar == '[' || cChar == ']' || cChar == '{' ||
+		cChar == '}' || IsCharWhitespace (cChar) || cChar == '\n')
+		return true;
+	else
+		return false;
+}
+
+void TrimWhitespace (char * pstrString)
+{
+	unsigned int iStringLength = strlen (pstrString);
+	unsigned int iPadLength;
+	unsigned int iCurrCharIndex;
+
+	if (iStringLength > 1)
+	{
+		for (iCurrCharIndex = 0; iCurrCharIndex < iStringLength; ++ iCurrCharIndex)
+			if (!IsCharWhitespace (pstrString[iCurrCharIndex]))
+				break;
+
+		iPadLength = iCurrCharIndex;
+		if (iPadLength)
+		{
+			for (iCurrCharIndex = iPadLength; iCurCharIndex < iStringLength;
+					++ iCurrCharIndex)
+				pstrString[iCurrCharIndex - iPadLength] = pstrString[iCurrCharIndex];
+
+			for (iCurrCharIndex = iStringLength - iPadLength;
+					iCurrCharIndex < iStringLength; ++ iCurrCharIndex)
+				pstrString[iCurrCharIndex] = ' ';
+		} 
+
+		for (iCurrCharIndex = iStringLength - 1; iCurrCharIndex > 0; 
+				-- iCurrCharIndex)
+		{
+			if (!IsCharWhitespace(pstrString[iCurrCharIndex]))
+			{
+				pstrString[iCurrCharIndex + 1] = '\0';
+				break;
+			}
+		}
+	}
+}
+
+int IsStringWhitespace (char * pstrString)
+{
+	if (!pstrString)
+		return false;
+
+	if (strlen (pstrString) == 0)
+		return true;
+
+	for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
+			++ iCurrCharIndex)
+		if (!IsCharWhitespace (pstrString[iCurrCharIndex]) && 
+				pstrString[iCurrCharIndex != '\n'])
+			return false;
+		return true;
+}
+
+int IsStringIdent (char * pstrString)
+{
+	if (!pstrString)
+		return false;
+
+	if (strlen(pstrString) == 0)
+		return false;
+
+	if (pstrString[0] >= '0' && pstrString[0] <= '9')
+		return false;
+
+	for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
+			++ iCurrCharIndex)
+		if (!IsCharIdent(pstrString[iCurrCharIndex]))
+			return false;
+	return true;
+}
+
+int IsStringInteger (char * pstrString)
+{
+	if (!pstrString)
+		return false;
+
+	if (strlen(pstrString) == 0)
+		return false;
+
+	unsigned int iCurrCharIndex;
+
+	for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+		if (!IsCharNumeric (pstrString[iCurrCharIndex]) && 
+				!(pstrString[iCurrCharIndex] == '-'))
+			return false;
+	
+	for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+		if (pstrString[iCurrCharIndex == '-'])
+			return false;
+	
+	return true
+}
+
+
+int IsStringFloat(char * pstrString)
+{
+	if (!pstrString)
+		return false;
+
+	if (strlen (pstrString) == 0)
+		return false;
+
+	unsigned int iCurrCharIndex;
+
+	for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+		if (!IsCharNumeric (pstrString[iCurrCharIndex]) && 
+				!(pstrString[iCurrCharIndex] == '.') &&
+				!(pstrString[iCurrCharIndex] == '-'))
+			return false;
+
+	int iRadixPointFound = 0;
+
+	for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+		if (pastrString[iCurrCharIndex] == '.')
+			if (iRadixPointFound)
+				return false;
+			else
+				iRadixPointFound = 1;
+
+	for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+		if (pstrString[iCurrCharIndex] == '-')
+			return false;
+
+	if (iRadixPointFound)
+		return true;
+	else
+		return false;
+}
+
+
+
+
+
 
 Token GetNextToken ()
 {
