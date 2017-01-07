@@ -104,6 +104,21 @@ typedef struct _SymbolNode
 }
 	SymbolNode;
 
+typedef int Token;
+
+typedef struct _Lexer
+{
+	int iCurrSourceLine;
+
+	unsigned int iIndex0,
+				 iIndex1;
+
+	Token currToken;
+	char pstrCurrLexme [ MAX_LEXEME_SIZE ];
+
+	int iCurrLexState;
+}
+	Lexer;
 
 // ---- Global Variables ----
 
@@ -410,3 +425,179 @@ int GetInstrByMnemonic ( char * pstrMnemonic, InstrLooup * pInstr )
 	
 	return false;
 }
+
+Token GetNextToken ()
+{
+	g_Lexer.iIndex0 = g_Lexer.iIndex1;
+
+	if ( g_Lexer.iIndex0 >= strlen ( g_ppstrSourceCode [ g_Lexer.iCurrSourceLine ]))
+	{
+		if (!SkipToNextLine())
+			return END_OF_TOKEN_STREAM;
+	}
+
+	if (g_Lexer.iCurrLexState == LEX_STATE_END_STRING)
+		g_Lexer.iCurrLexState = LEX_STATE_NO_STRING;
+
+	if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
+	{
+		while (true)
+		{
+			if (!IsCharWhitespace(g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
+						[g_Lexer.iIndex0]))
+				break;
+
+			++ g_Lexer.iIndex0;
+		}
+	}
+
+	g_Lexer.index1 = g_Lexer.iIndex0;
+
+	while (true)
+	{
+		if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
+		{
+			if (g_Lexer.iIndex1 >= 
+					strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
+			{
+				g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
+				return g_Lexer.CurrToken;
+			}
+
+			if (p_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1] == '\\')
+			{
+				g_Lexer.iIndex1 += 2;
+				continue;
+			}
+
+			if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1] == '"')
+				break;
+			
+			++ g_Lexer.iIndex1;
+		}
+
+		else
+		{
+			if (g_Lexer.iIndex1 >= 
+					strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
+				break;
+
+			if (IsCharDelimiter (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
+						[g_Lexer.iIndex1]))
+				break;	
+			
+			++ g_Lexer.iIndex1;
+		}
+	}
+
+	if (g_Lexer.iIndex1 - g_Lexer.iIndex0 == 0)
+		++ g_Lexer.iIndex1;
+
+	unsigned int iCurrDestIndex = 0;
+	for (unsigned int iCurrSourceIndex = g_Lexer.iIndex0; 
+			iCurrSourceIndex < g_Lexer.iIndex1; ++ iCurrSourceIndex)
+	{
+		if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
+			if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex] 
+					== '\\')
+				++ iCurrSourceIndex;
+
+		g_Lexer.pstrCurrLexeme[iCurrDestIndex] = 
+			g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex];
+		
+		++ iCurrDestIndex
+	}
+
+	g_Lexer.pstrCurrLexeme[iCurrDestIndex] = '\0';
+
+	if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
+		strupr (g_Lexer.pstrCurrLexeme);
+
+	g_Lexer.CurrToken = TOKEN_TYPE_INCALID;
+
+	if (strlen(g_Lexer.pstrCurrLexme) > 1 || g_Lexer.pstrCurrLexeme[0] != '"')
+	{
+		if (g_Lexer.iCurrLexStat == LEX_STATE_IN_STRING)
+		{
+			g_Lexer.CurrToken = TOKEN_TYPE_STRING;
+			return TOKEN_TYPE_STRING;
+		}
+	}
+
+	if (strlen (g_Lexer.pstrCurrLexme) == 1)
+	{
+		switch (g_Lexer.pstrCurrLexme[0])
+		{
+			case '"':
+				switch (g_Lexer.iCurrLexState)
+				{
+					case LEX_STATE_NO_STRING:
+						g_Lexer.iCurrLexState = LEX_STATE_IN_STRING;
+						break;
+
+					case LEX_STATE_IN_STRING:
+						g_Lexer.iCUrrLexState = LEX_STATE_END_STRING;
+						break;
+				}
+
+				g_Lexer.CurrToken = TOKEN_TYPE_QUOTE;
+
+			case ',':
+				g_Lexer.CurrToken = TOKEN_TYPE_COMMA;
+				break;
+
+			case ':':
+				g_Lexer.CurrToken = TOKEN_TYPE_COLON;
+				break;
+
+			case '[':
+				g_Lexer.CurrToken = TOKEN_TYPE_OPEN_BRACKET;
+				break;
+			
+			case ']':
+				g_Lexer.CurrToken = TOKEN_TYPE_CLOSE_BRACKET;
+				break;
+
+			case '{':
+				g_Lexer.CurrToken = TOKEN_TYPE_OPEN_BRACE;
+				break;
+
+			case '}':
+				g_Lexer.CurrToken = TOKEN_TYPE_CLOSE_BRACE;
+				break;
+
+			case '\n':
+				g_Lexer.CurrToken = TOKEN_TYPE_NEWLINE;
+				break;
+		}
+	}
+
+	if (IsStringInteger (g_Lexer.pstrCurrLexeme))
+		g_Lexer.CurrToken = TOKEN_TYPE_INT;
+	
+	if (IsStringFloat (g_Lexer.pstrCurrLexeme))
+		g_Lexer.CurrToken = TOKEN_TYPE_FLOAT;
+
+	if (IsStringIdent (g_Lexer.pstrCurrLexeme))
+		g_Lexer.CurrToken = TOKEN_TYPE_IDENT;
+
+	if (strcmp(g_Lexer.pstrCurrLexeme, "SETSTACKSIZE") == 0)
+		g_Lexer.CurrToken = TOKEN_TYPE_SETSTACKSIZE;
+
+	if (strcmp(g_Lexer.pstrCurrLexeme, "VAR") == 0)
+		g_Lexer.CurrToken = TOKEN_TYPE_VAR;
+
+	if (strcmp(g_Lexer.pstrCurrLexeme, "FUNC") == 0)
+		g_Lexer.CurrToken = TOKEN_TYPE_FUNC;
+
+	if (strcmp(g_Lexer.pstrCurrLexeme, "_RETVAL") == 0)
+		g_Lexer.Currtoken = TOKEN_TYPE_RETVAL;
+	
+	InstrLookup Instr;
+
+	if (GetInstrByMnemonic(g_Lexer.pstrCurrLexeme, & Instr))
+		g_Lexer.CurrToken = TOKEN_TYPE_INSTR;
+
+	return g_Lexer.CurrToken;
+}
+				
