@@ -376,10 +376,58 @@ void SetOpType ( int iInstrIndex, int iOpIndex, OpTypes iOpType );
 int GetInstrByMnemonic ( char * pstrMnemonic, InstrLookup * pInstr );
 
 int SkipToNextLine();
+void ResetLexer();
 
 void strupr(char * pstrString);
 
 // ---- Functions ----
+void AssmblSourceFile ()
+{
+	g_ScriptHeader.iStackSize = 0;
+	g_ScriptHeader.iIsMainFuncPresent = false;
+
+	g_iInstrStreamSize = 0;
+	g_iIsSetStackSizeFound = false;
+	g_ScriptHeader.iGlobalDataSize = 0;
+
+	int iIsFuncActive = false;
+	FuncNode * pCurrFunc;
+	int iCurrFuncIndex;
+	char pstrCurrFuncName[MAX_IDENT_SIZE];
+	int iCurrFuncParamCount = 0;
+	int iCurrFuncLocalDataSize = 0;
+
+	InstrLookup CurrInstr;
+
+	ResetLexer();
+
+	while (true)
+	{
+		if (GetNextToken () == END_OF_TOKEN_STREAM)
+			break;
+
+		switch (g_Lexer.CurrToken)
+		{
+			case TOKEN_TYPE_SETSTACKSIZE:
+			{
+				if (iIsFuncActive)
+					ExitOnCodeError (ERROR_MSSG_LOCAL_SETSTACKSIZE);
+				
+				if (g_iIsSetStackSizeFound)
+					ExitOnCodeError (ERROR_MSSG_MULTIPLE_SETSTACKSIZES);
+
+				if (GetNextToken () != TOKEN_TYPE_INT)
+					ExitOnCodeError (ERROR_MSSG_INVALID_STACK_SIZE);
+
+				g_ScriptHeader.iStackSize = atoi (GetCurrLexeme ());
+				
+				g_iIsSetStackSizeFound = true;
+
+				break;
+			}
+
+
+} 
 
 void strupr (char * pstrString)
 {
@@ -669,380 +717,461 @@ int SkipToNextLine ()
 	return true;
 }
 
-void StripComments (char * pstrSourceLine)
+void ResetLexer ();
 {
-	unsigned int iCurrCharIndex;
-	int iInString;
+	g_Lexer.iCurrSourceLine = 0;
 
-	iInString = 0;
-	for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrSourceLine) - 1; ++ iCurrCharIndex)
-	{
-		if (pstrSourceLine[iCurrCharIndex] == '"')
-		{
-			if (iInString)
-				iInString = 0;
-			else
-				iInString = 1;
-		}
+	g_Lexer.iIndex0 = 0;
+	g_Lexer.iIndex1 = 0;
 
-		if (pstrSourceLine[iCurrCharIndex] == ';')
-		{
-			if (!iInString)
-			{
-				pstrSourceLine[iCurrCharIndex] = '\n';
-				pstrSourceLine[iCurrCharIndex + 1] = '\0';
-				break;
-			}
-		}
-	}
+	g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
+
+	g_Lexer.iCurrLexState = LEX_STATE_NO_STRING;
 }
 
-int IsCharWhitespace (char cChar)
+char GetLookAheadChar ()
 {
-	if (cChar == ' ' || cChar == '\t')
-		return true;
-	else
-		return false;
-}
-
-int IsCharNumeric (char cChar)
-{
-	if (cChar >= '0' && cChar <= '9')
-		return true;
-	else
-		return false;
-}
-
-int IsCharIdent (char cChar)
-{
-	if ((cChar >= '0' && cChar <= '9') ||
-			(cChar >= 'A' && cChar <= 'Z') ||
-			(cChar >= 'a' && cChar <= 'z') ||
-			cChar == '_')
-		return true;
-	else
-		return false;
-}
-
-int IsCharDelimiter (char cChar)
-{
-	if (cChar == ':' || cChar == ',' || cChar == '"' ||
-			cChar == '[' || cChar == ']' || cChar == '{' ||
-			cChar == '}' || IsCharWhitespace (cChar) || cChar == '\n')
-		return true;
-	else
-		return false;
-}
-
-void TrimWhitespace (char * pstrString)
-{
-	unsigned int iStringLength = strlen (pstrString);
-	unsigned int iPadLength;
-	unsigned int iCurrCharIndex;
-
-	if (iStringLength > 1)
-	{
-		for (iCurrCharIndex = 0; iCurrCharIndex < iStringLength; ++ iCurrCharIndex)
-			if (!IsCharWhitespace (pstrString[iCurrCharIndex]))
-				break;
-
-		iPadLength = iCurrCharIndex;
-		if (iPadLength)
-		{
-			for (iCurrCharIndex = iPadLength; iCurrCharIndex < iStringLength;
-					++ iCurrCharIndex)
-				pstrString[iCurrCharIndex - iPadLength] = pstrString[iCurrCharIndex];
-
-			for (iCurrCharIndex = iStringLength - iPadLength;
-					iCurrCharIndex < iStringLength; ++ iCurrCharIndex)
-				pstrString[iCurrCharIndex] = ' ';
-		} 
-
-		for (iCurrCharIndex = iStringLength - 1; iCurrCharIndex > 0; 
-				-- iCurrCharIndex)
-		{
-			if (!IsCharWhitespace(pstrString[iCurrCharIndex]))
-			{
-				pstrString[iCurrCharIndex + 1] = '\0';
-				break;
-			}
-		}
-	}
-}
-
-int IsStringWhitespace (char * pstrString)
-{
-	if (!pstrString)
-		return false;
-
-	if (strlen (pstrString) == 0)
-		return true;
-
-	for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
-			++ iCurrCharIndex)
-		if (!IsCharWhitespace (pstrString[iCurrCharIndex]) && 
-				pstrString[iCurrCharIndex != '\n'])
-			return false;
-	return true;
-}
-
-int IsStringIdent (char * pstrString)
-{
-	if (!pstrString)
-		return false;
-
-	if (strlen(pstrString) == 0)
-		return false;
-
-	if (pstrString[0] >= '0' && pstrString[0] <= '9')
-		return false;
-
-	for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
-			++ iCurrCharIndex)
-		if (!IsCharIdent(pstrString[iCurrCharIndex]))
-			return false;
-	return true;
-}
-
-int IsStringInteger (char * pstrString)
-{
-	if (!pstrString)
-		return false;
-
-	if (strlen(pstrString) == 0)
-		return false;
-
-	unsigned int iCurrCharIndex;
-
-	for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-		if (!IsCharNumeric (pstrString[iCurrCharIndex]) && 
-				!(pstrString[iCurrCharIndex] == '-'))
-			return false;
-
-	for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-		if (pstrString[iCurrCharIndex == '-'])
-			return false;
-
-	return true;
-}
-
-
-int IsStringFloat(char * pstrString)
-{
-	if (!pstrString)
-		return false;
-
-	if (strlen (pstrString) == 0)
-		return false;
-
-	unsigned int iCurrCharIndex;
-
-	for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-		if (!IsCharNumeric (pstrString[iCurrCharIndex]) && 
-				!(pstrString[iCurrCharIndex] == '.') &&
-				!(pstrString[iCurrCharIndex] == '-'))
-			return false;
-
-	int iRadixPointFound = 0;
-
-	for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-	{
-		if (pstrString[iCurrCharIndex] == '.')
-		{
-			if (iRadixPointFound)
-				return false;
-			else
-				iRadixPointFound = 1;
-		}
-	}
-
-	for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-		if (pstrString[iCurrCharIndex] == '-')
-			return false;
-
-	if (iRadixPointFound)
-		return true;
-	else
-		return false;
-}
-
-
-
-
-
-
-Token GetNextToken ()
-{
-	g_Lexer.iIndex0 = g_Lexer.iIndex1;
-
-	if ( g_Lexer.iIndex0 >= strlen ( g_ppstrSourceCode [ g_Lexer.iCurrSourceLine ]))
-	{
-		if (!SkipToNextLine())
-			return END_OF_TOKEN_STREAM;
-	}
-
-	if (g_Lexer.iCurrLexState == LEX_STATE_END_STRING)
-		g_Lexer.iCurrLexState = LEX_STATE_NO_STRING;
+	int iCurrSourceLine = g_Lexer.iCurrSourceLine;
+	unsigned int iIndex = g_Lexer.iIndex1;
 
 	if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
 	{
 		while (true)
 		{
-			if (!IsCharWhitespace(g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
-						[g_Lexer.iIndex0]))
-				break;
-
-			++ g_Lexer.iIndex0;
-		}
-	}
-
-	g_Lexer.iIndex1 = g_Lexer.iIndex0;
-
-	while (true)
-	{
-		if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
-		{
-			if (g_Lexer.iIndex1 >= 
-					strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
+			if (iIndex >= strlen (g_ppstrSourceCode[iCurrSourceLine]))
 			{
-				g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
-				return g_Lexer.CurrToken;
+				iCurrSourceLine += 1;
+
+				if (iCurrSourceLine >= g_iSourceCodeSize)
+					return 0;
+
+				iIndex = 0;
 			}
 
-			if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1] == '\\')
+			if (!IsCharWhitespace(g_ppstrSourceCode[iCurrSourceLine][iIndex]))
+				break;
+
+			++ index;
+		}
+
+		return g_ppstrSourceCode[iCurrSourceLine][iIndex];
+	}
+
+
+	void StripComments (char * pstrSourceLine)
+	{
+		unsigned int iCurrCharIndex;
+		int iInString;
+
+		iInString = 0;
+		for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrSourceLine) - 1; ++ iCurrCharIndex)
+		{
+			if (pstrSourceLine[iCurrCharIndex] == '"')
 			{
-				g_Lexer.iIndex1 += 2;
-				continue;
+				if (iInString)
+					iInString = 0;
+				else
+					iInString = 1;
 			}
 
-			if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1] == '"')
-				break;
-
-			++ g_Lexer.iIndex1;
-		}
-
-		else
-		{
-			if (g_Lexer.iIndex1 >= 
-					strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
-				break;
-
-			if (IsCharDelimiter (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
-						[g_Lexer.iIndex1]))
-				break;	
-
-			++ g_Lexer.iIndex1;
-		}
-	}
-
-	if (g_Lexer.iIndex1 - g_Lexer.iIndex0 == 0)
-		++ g_Lexer.iIndex1;
-
-	unsigned int iCurrDestIndex = 0;
-	for (unsigned int iCurrSourceIndex = g_Lexer.iIndex0; 
-			iCurrSourceIndex < g_Lexer.iIndex1; ++ iCurrSourceIndex)
-	{
-		if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
-			if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex] 
-					== '\\')
-				++ iCurrSourceIndex;
-
-		g_Lexer.pstrCurrLexeme[iCurrDestIndex] = 
-			g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex];
-
-		++ iCurrDestIndex;
-	}
-
-	g_Lexer.pstrCurrLexeme[iCurrDestIndex] = '\0';
-
-	if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
-		strupr (g_Lexer.pstrCurrLexeme);
-
-	g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
-
-	if (strlen(g_Lexer.pstrCurrLexeme) > 1 || g_Lexer.pstrCurrLexeme[0] != '"')
-	{
-		if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
-		{
-			g_Lexer.CurrToken = TOKEN_TYPE_STRING;
-			return TOKEN_TYPE_STRING;
-		}
-	}
-
-	if (strlen (g_Lexer.pstrCurrLexeme) == 1)
-	{
-		switch (g_Lexer.pstrCurrLexeme[0])
-		{
-			case '"':
-				switch (g_Lexer.iCurrLexState)
+			if (pstrSourceLine[iCurrCharIndex] == ';')
+			{
+				if (!iInString)
 				{
-					case LEX_STATE_NO_STRING:
-						g_Lexer.iCurrLexState = LEX_STATE_IN_STRING;
-						break;
+					pstrSourceLine[iCurrCharIndex] = '\n';
+					pstrSourceLine[iCurrCharIndex + 1] = '\0';
+					break;
+				}
+			}
+		}
+	}
 
-					case LEX_STATE_IN_STRING:
-						g_Lexer.iCurrLexState = LEX_STATE_END_STRING;
-						break;
+	int IsCharWhitespace (char cChar)
+	{
+		if (cChar == ' ' || cChar == '\t')
+			return true;
+		else
+			return false;
+	}
+
+	int IsCharNumeric (char cChar)
+	{
+		if (cChar >= '0' && cChar <= '9')
+			return true;
+		else
+			return false;
+	}
+
+	int IsCharIdent (char cChar)
+	{
+		if ((cChar >= '0' && cChar <= '9') ||
+				(cChar >= 'A' && cChar <= 'Z') ||
+				(cChar >= 'a' && cChar <= 'z') ||
+				cChar == '_')
+			return true;
+		else
+			return false;
+	}
+
+	int IsCharDelimiter (char cChar)
+	{
+		if (cChar == ':' || cChar == ',' || cChar == '"' ||
+				cChar == '[' || cChar == ']' || cChar == '{' ||
+				cChar == '}' || IsCharWhitespace (cChar) || cChar == '\n')
+			return true;
+		else
+			return false;
+	}
+
+	void TrimWhitespace (char * pstrString)
+	{
+		unsigned int iStringLength = strlen (pstrString);
+		unsigned int iPadLength;
+		unsigned int iCurrCharIndex;
+
+		if (iStringLength > 1)
+		{
+			for (iCurrCharIndex = 0; iCurrCharIndex < iStringLength; ++ iCurrCharIndex)
+				if (!IsCharWhitespace (pstrString[iCurrCharIndex]))
+					break;
+
+			iPadLength = iCurrCharIndex;
+			if (iPadLength)
+			{
+				for (iCurrCharIndex = iPadLength; iCurrCharIndex < iStringLength;
+						++ iCurrCharIndex)
+					pstrString[iCurrCharIndex - iPadLength] = pstrString[iCurrCharIndex];
+
+				for (iCurrCharIndex = iStringLength - iPadLength;
+						iCurrCharIndex < iStringLength; ++ iCurrCharIndex)
+					pstrString[iCurrCharIndex] = ' ';
+			} 
+
+			for (iCurrCharIndex = iStringLength - 1; iCurrCharIndex > 0; 
+					-- iCurrCharIndex)
+			{
+				if (!IsCharWhitespace(pstrString[iCurrCharIndex]))
+				{
+					pstrString[iCurrCharIndex + 1] = '\0';
+					break;
+				}
+			}
+		}
+	}
+
+	int IsStringWhitespace (char * pstrString)
+	{
+		if (!pstrString)
+			return false;
+
+		if (strlen (pstrString) == 0)
+			return true;
+
+		for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
+				++ iCurrCharIndex)
+			if (!IsCharWhitespace (pstrString[iCurrCharIndex]) && 
+					pstrString[iCurrCharIndex != '\n'])
+				return false;
+		return true;
+	}
+
+	int IsStringIdent (char * pstrString)
+	{
+		if (!pstrString)
+			return false;
+
+		if (strlen(pstrString) == 0)
+			return false;
+
+		if (pstrString[0] >= '0' && pstrString[0] <= '9')
+			return false;
+
+		for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
+				++ iCurrCharIndex)
+			if (!IsCharIdent(pstrString[iCurrCharIndex]))
+				return false;
+		return true;
+	}
+
+	int IsStringInteger (char * pstrString)
+	{
+		if (!pstrString)
+			return false;
+
+		if (strlen(pstrString) == 0)
+			return false;
+
+		unsigned int iCurrCharIndex;
+
+		for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+			if (!IsCharNumeric (pstrString[iCurrCharIndex]) && 
+					!(pstrString[iCurrCharIndex] == '-'))
+				return false;
+
+		for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+			if (pstrString[iCurrCharIndex == '-'])
+				return false;
+
+		return true;
+	}
+
+
+	int IsStringFloat(char * pstrString)
+	{
+		if (!pstrString)
+			return false;
+
+		if (strlen (pstrString) == 0)
+			return false;
+
+		unsigned int iCurrCharIndex;
+
+		for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+			if (!IsCharNumeric (pstrString[iCurrCharIndex]) && 
+					!(pstrString[iCurrCharIndex] == '.') &&
+					!(pstrString[iCurrCharIndex] == '-'))
+				return false;
+
+		int iRadixPointFound = 0;
+
+		for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+		{
+			if (pstrString[iCurrCharIndex] == '.')
+			{
+				if (iRadixPointFound)
+					return false;
+				else
+					iRadixPointFound = 1;
+			}
+		}
+
+		for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+			if (pstrString[iCurrCharIndex] == '-')
+				return false;
+
+		if (iRadixPointFound)
+			return true;
+		else
+			return false;
+	}
+
+
+
+
+
+
+	Token GetNextToken ()
+	{
+		g_Lexer.iIndex0 = g_Lexer.iIndex1;
+
+		if ( g_Lexer.iIndex0 >= strlen ( g_ppstrSourceCode [ g_Lexer.iCurrSourceLine ]))
+		{
+			if (!SkipToNextLine())
+				return END_OF_TOKEN_STREAM;
+		}
+
+		if (g_Lexer.iCurrLexState == LEX_STATE_END_STRING)
+			g_Lexer.iCurrLexState = LEX_STATE_NO_STRING;
+
+		if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
+		{
+			while (true)
+			{
+				if (!IsCharWhitespace(g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
+							[g_Lexer.iIndex0]))
+					break;
+
+				++ g_Lexer.iIndex0;
+			}
+		}
+
+		g_Lexer.iIndex1 = g_Lexer.iIndex0;
+
+		while (true)
+		{
+			if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
+			{
+				if (g_Lexer.iIndex1 >= 
+						strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
+				{
+					g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
+					return g_Lexer.CurrToken;
 				}
 
-				g_Lexer.CurrToken = TOKEN_TYPE_QUOTE;
+				if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1] == '\\')
+				{
+					g_Lexer.iIndex1 += 2;
+					continue;
+				}
 
-			case ',':
-				g_Lexer.CurrToken = TOKEN_TYPE_COMMA;
-				break;
+				if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1] == '"')
+					break;
 
-			case ':':
-				g_Lexer.CurrToken = TOKEN_TYPE_COLON;
-				break;
+				++ g_Lexer.iIndex1;
+			}
 
-			case '[':
-				g_Lexer.CurrToken = TOKEN_TYPE_OPEN_BRACKET;
-				break;
+			else
+			{
+				if (g_Lexer.iIndex1 >= 
+						strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
+					break;
 
-			case ']':
-				g_Lexer.CurrToken = TOKEN_TYPE_CLOSE_BRACKET;
-				break;
+				if (IsCharDelimiter (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
+							[g_Lexer.iIndex1]))
+					break;	
 
-			case '{':
-				g_Lexer.CurrToken = TOKEN_TYPE_OPEN_BRACE;
-				break;
-
-			case '}':
-				g_Lexer.CurrToken = TOKEN_TYPE_CLOSE_BRACE;
-				break;
-
-			case '\n':
-				g_Lexer.CurrToken = TOKEN_TYPE_NEWLINE;
-				break;
+				++ g_Lexer.iIndex1;
+			}
 		}
+
+		if (g_Lexer.iIndex1 - g_Lexer.iIndex0 == 0)
+			++ g_Lexer.iIndex1;
+
+		unsigned int iCurrDestIndex = 0;
+		for (unsigned int iCurrSourceIndex = g_Lexer.iIndex0; 
+				iCurrSourceIndex < g_Lexer.iIndex1; ++ iCurrSourceIndex)
+		{
+			if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
+				if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex] 
+						== '\\')
+					++ iCurrSourceIndex;
+
+			g_Lexer.pstrCurrLexeme[iCurrDestIndex] = 
+				g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex];
+
+			++ iCurrDestIndex;
+		}
+
+		g_Lexer.pstrCurrLexeme[iCurrDestIndex] = '\0';
+
+		if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
+			strupr (g_Lexer.pstrCurrLexeme);
+
+		g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
+
+		if (strlen(g_Lexer.pstrCurrLexeme) > 1 || g_Lexer.pstrCurrLexeme[0] != '"')
+		{
+			if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
+			{
+				g_Lexer.CurrToken = TOKEN_TYPE_STRING;
+				return TOKEN_TYPE_STRING;
+			}
+		}
+
+		if (strlen (g_Lexer.pstrCurrLexeme) == 1)
+		{
+			switch (g_Lexer.pstrCurrLexeme[0])
+			{
+				case '"':
+					switch (g_Lexer.iCurrLexState)
+					{
+						case LEX_STATE_NO_STRING:
+							g_Lexer.iCurrLexState = LEX_STATE_IN_STRING;
+							break;
+
+						case LEX_STATE_IN_STRING:
+							g_Lexer.iCurrLexState = LEX_STATE_END_STRING;
+							break;
+					}
+
+					g_Lexer.CurrToken = TOKEN_TYPE_QUOTE;
+
+				case ',':
+					g_Lexer.CurrToken = TOKEN_TYPE_COMMA;
+					break;
+
+				case ':':
+					g_Lexer.CurrToken = TOKEN_TYPE_COLON;
+					break;
+
+				case '[':
+					g_Lexer.CurrToken = TOKEN_TYPE_OPEN_BRACKET;
+					break;
+
+				case ']':
+					g_Lexer.CurrToken = TOKEN_TYPE_CLOSE_BRACKET;
+					break;
+
+				case '{':
+					g_Lexer.CurrToken = TOKEN_TYPE_OPEN_BRACE;
+					break;
+
+				case '}':
+					g_Lexer.CurrToken = TOKEN_TYPE_CLOSE_BRACE;
+					break;
+
+				case '\n':
+					g_Lexer.CurrToken = TOKEN_TYPE_NEWLINE;
+					break;
+			}
+		}
+
+		if (IsStringInteger (g_Lexer.pstrCurrLexeme))
+			g_Lexer.CurrToken = TOKEN_TYPE_INT;
+
+		if (IsStringFloat (g_Lexer.pstrCurrLexeme))
+			g_Lexer.CurrToken = TOKEN_TYPE_FLOAT;
+
+		if (IsStringIdent (g_Lexer.pstrCurrLexeme))
+			g_Lexer.CurrToken = TOKEN_TYPE_IDENT;
+
+		if (strcmp(g_Lexer.pstrCurrLexeme, "SETSTACKSIZE") == 0)
+			g_Lexer.CurrToken = TOKEN_TYPE_SETSTACKSIZE;
+
+		if (strcmp(g_Lexer.pstrCurrLexeme, "VAR") == 0)
+			g_Lexer.CurrToken = TOKEN_TYPE_VAR;
+
+		if (strcmp(g_Lexer.pstrCurrLexeme, "FUNC") == 0)
+			g_Lexer.CurrToken = TOKEN_TYPE_FUNC;
+
+		if (strcmp(g_Lexer.pstrCurrLexeme, "_RETVAL") == 0)
+			g_Lexer.CurrToken = TOKEN_TYPE_REG_RETVAL;
+
+		InstrLookup Instr;
+
+		if (GetInstrByMnemonic(g_Lexer.pstrCurrLexeme, & Instr))
+			g_Lexer.CurrToken = TOKEN_TYPE_INSTR;
+
+		return g_Lexer.CurrToken;
 	}
 
-	if (IsStringInteger (g_Lexer.pstrCurrLexeme))
-		g_Lexer.CurrToken = TOKEN_TYPE_INT;
+	void ExitOnError (char * pstrErrorMssg)
+	{
+		printf ("Fatal Error: %s.\n", pstrErrorMssg);
 
-	if (IsStringFloat (g_Lexer.pstrCurrLexeme))
-		g_Lexer.CurrToken = TOKEN_TYPE_FLOAT;
+		Exit ();
+	}
 
-	if (IsStringIdent (g_Lexer.pstrCurrLexeme))
-		g_Lexer.CurrToken = TOKEN_TYPE_IDENT;
+	void ExitOnCodeError (char * pstrErrorMssgr)
+	{
+		printf ("Error: %s. \n\n", pstrErrorMssg);
+		printf ("Line %d\n", g_Lexer.iCurrSourceLine);
 
-	if (strcmp(g_Lexer.pstrCurrLexeme, "SETSTACKSIZE") == 0)
-		g_Lexer.CurrToken = TOKEN_TYPE_SETSTACKSIZE;
+		char pstrSourceLine[MAX_SOURCE_LINE_SIZE];
+		strcpy (pstrSourceLine, g_ppstrSourceCode[g_Lexer.iCurrSourceLine]);
 
-	if (strcmp(g_Lexer.pstrCurrLexeme, "VAR") == 0)
-		g_Lexer.CurrToken = TOKEN_TYPE_VAR;
+		for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen(pstrSourceLine); 
+				++ icurrchar)
+		{
+			if (pstrSourceLine[iCurrCharIndex] == '\t')
+				pstrSourceLine[iCurrFuncIndex] = ' ';
+		}
 
-	if (strcmp(g_Lexer.pstrCurrLexeme, "FUNC") == 0)
-		g_Lexer.CurrToken = TOKEN_TYPE_FUNC;
+		printf ("%s", pstrSourceLine);
 
-	if (strcmp(g_Lexer.pstrCurrLexeme, "_RETVAL") == 0)
-		g_Lexer.CurrToken = TOKEN_TYPE_REG_RETVAL;
+		for (unsigned int iCurrSpace = 0; iCurrSpace < g_Lexer.iIndex0; ++ iCurrSpace)
+			printf (" ");
+		printf ("^\n");
 
-	InstrLookup Instr;
+		printf ("Could not assemble %s.\n", g_pstrSourceFilename);
 
-	if (GetInstrByMnemonic(g_Lexer.pstrCurrLexeme, & Instr))
-		g_Lexer.CurrToken = TOKEN_TYPE_INSTR;
+		Exit();
+	}
 
-	return g_Lexer.CurrToken;
-}
+	void ExitOnCharExpectedError (char cChar)
+	{
+		char * pstrErrorMssg = (char *) malloc (strlen ("' ' expected"));
+		sprintf (pstrErrorMssg, "'%c' expected", cChar);
 
+		ExitOnCodeError(pstrErrorMssg);
+	}
