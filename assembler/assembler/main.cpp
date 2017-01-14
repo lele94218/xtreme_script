@@ -344,6 +344,8 @@ Lexer g_Lexer;
 char ** g_ppstrSourceCode = NULL;
 int g_iSourceCodeSize;
 
+char g_pstrSourceFilename[MAX_FILENAME_SIZE], g_pstrExecFilename[MAX_FILENAME_SIZE];
+
 // The instruction lookup table
 InstrLookup g_InstrTable [ MAX_INSTR_LOOKUP_COUNT ];
 
@@ -363,6 +365,8 @@ LinkedList g_LabelTable;
 LinkedList g_HostAPICallTable;
 
 // ---- Function declarations ----
+void ShutDown();
+
 int AddString ( LinkedList * pList, char * pstrString );
 int AddFunc ( char * pstrName, int iEntryPoint );
 FuncNode * GetFuncByName( char * pstrName );
@@ -373,6 +377,8 @@ SymbolNode * GetSymbolByIdent ( char * pstrIdent, int iFuncIndex );
 int GetStackIndexByIdent ( char * pstrIdent, int iFuncIndex );
 int GetSizeByIdent ( char * pstrIdent, int iFuncIndex );
 
+int IsCharWhitespace (char cChar);
+
 int AddLabel ( char * pstrIdent, int iTargetIndex, int iFuncIndex );
 LabelNode * GetLabelByIdent ( char * pstrIdent, int iFuncIndex );
 
@@ -381,12 +387,15 @@ void SetOpType ( int iInstrIndex, int iOpIndex, OpTypes iOpType );
 int GetInstrByMnemonic ( char * pstrMnemonic, InstrLookup * pInstr );
 
 int SkipToNextLine();
-void ResetLexer();
+void ResetLexer ();
+Token GetNextToken();
+char GetLookAheadChar ();
+char * GetCurrLexeme ();
 
 void strupr(char * pstrString);
 void Exit ();
 void ExitOnError (char * pstrErrorMssg);
-void ExitOnCodeError (char * pstrErrorMssg);
+void ExitOnCodeError (const char * pstrErrorMssg);
 void ExitOnCharExpectedError (char cChar);
 
 // ---- Functions ----
@@ -534,750 +543,830 @@ void AssmblSourceFile ()
             }
                 
         }
+    }
+}
+
+void strupr (char * pstrString)
+{
+    for (int iCurrCharIndex = 0;
+         iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+    {
+        char cCurrChar = pstrString[iCurrCharIndex];
+        pstrString[iCurrCharIndex] = toupper(cCurrChar);
+    }
+}
+
+char * GetCurrLexeme ()
+{
+    return g_Lexer.pstrCurrLexeme;
+}
+
+void InitLinkedList ( LinkedList * pList )
+{
+    pList->pHead = NULL;
+    pList->pTail = NULL;
+    
+    pList->iNodeCount = 0;
+}
+
+int AddNode ( LinkedList * pList, void * pData )
+{
+    LinkedListNode * pNewNode = ( LinkedListNode * )
+    malloc (sizeof ( LinkedListNode ));
+    
+    pNewNode->pData = pData;
+    pNewNode->pNext = NULL;
+    
+    if ( ! pList->iNodeCount)
+    {
+        pList->pHead = pNewNode;
+        pList->pTail = pNewNode;
+    }
+    
+    else
+    {
+        pList->pTail->pNext = pNewNode;
+        pList->pTail = pNewNode;
+    }
+    
+    ++pList->iNodeCount;
+    
+    return pList->iNodeCount - 1;
+}
+
+void FreeLinkedList ( LinkedList * pList )
+{
+    if ( ! pList )
+        return;
+    
+    if ( pList->iNodeCount )
+    {
+        LinkedListNode * pCurrNode,
+        * pNextNode;
         
-        void strupr (char * pstrString)
-        {
-            for (int iCurrCharIndex = 0;
-                 iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-            {
-                char cCurrChar = pstrString[iCurrCharIndex];
-                pstrString[iCurrCharIndex] = toupper(cCurrChar);
-            }
-        }
+        pCurrNode = pList->pHead;
         
-        void InitLinkedList ( LinkedList * pList )
+        while ( true )
         {
-            pList->pHead = NULL;
-            pList->pTail = NULL;
+            pNextNode = pCurrNode->pNext;
             
-            pList->iNodeCount = 0;
-        }
-        
-        int AddNode ( LinkedList * pList, void * pData )
-        {
-            LinkedListNode * pNewNode = ( LinkedListNode * )
-            malloc (sizeof ( LinkedListNode ));
+            if (  pCurrNode->pData)
+                free ( pCurrNode->pData );
             
-            pNewNode->pData = pData;
-            pNewNode->pNext = NULL;
+            if ( pCurrNode )
+                free ( pCurrNode);
             
-            if ( ! pList->iNodeCount)
-            {
-                pList->pHead = pNewNode;
-                pList->pTail = pNewNode;
-            }
-            
+            if ( pNextNode)
+                pCurrNode = pNextNode;
             else
-            {
-                pList->pTail->pNext = pNewNode;
-                pList->pTail = pNewNode;
-            }
-            
-            ++pList->iNodeCount;
-            
-            return pList->iNodeCount - 1;
+                break;
         }
+    }
+}
+
+int AddString( LinkedList * pList, char * pstrString )
+{
+    LinkedListNode * pNode = pList->pHead;
+    
+    for ( int iCurrNode = 0; iCurrNode < pList->iNodeCount; ++ iCurrNode )
+    {
+        if ( strcmp ( ( char * ) pNode->pData, pstrString ) == 0 )
+            return iCurrNode;
         
-        void FreeLinkedList ( LinkedList * pList )
-        {
-            if ( ! pList )
-                return;
-            
-            if ( pList->iNodeCount )
-            {
-                LinkedListNode * pCurrNode,
-                * pNextNode;
-                
-                pCurrNode = pList->pHead;
-                
-                while ( true )
-                {
-                    pNextNode = pCurrNode->pNext;
-                    
-                    if (  pCurrNode->pData)
-                        free ( pCurrNode->pData );
-                    
-                    if ( pCurrNode )
-                        free ( pCurrNode);
-                    
-                    if ( pNextNode)
-                        pCurrNode = pNextNode;
-                    else
-                        break;
-                }
-            }
-        }
+        pNode = pNode->pNext;
+    }
+    
+    char * pstrStringNode = (char *) malloc (strlen ( pstrString ) + 1);
+    strcpy ( pstrStringNode, pstrString );
+    
+    return AddNode ( pList, pstrStringNode );
+}
+
+int AddFunc (char * pstrName, int iEntryPoint)
+{
+    if ( GetFuncByName ( pstrName ) )
+        return -1;
+    
+    FuncNode * pNewFunc = ( FuncNode * ) malloc ( sizeof ( FuncNode ) );
+    
+    strcpy ( pNewFunc->pstrName, pstrName);
+    pNewFunc->iEntryPoint = iEntryPoint;
+    
+    int iIndex = AddNode ( & g_FuncTable, pNewFunc );
+    
+    pNewFunc->iIndex = iIndex;
+    
+    return iIndex;
+}
+
+void SetFuncInfo ( char * pstrName, int iParamCount, int iLocalDataSize )
+{
+    FuncNode * pFunc = GetFuncByName ( pstrName );
+    
+    pFunc->iParamCount = iParamCount;
+    pFunc->iLocalDataSize = iLocalDataSize;
+}
+
+FuncNode * GetFuncByName ( char * pstrName )
+{
+    if ( ! g_FuncTable.iNodeCount )
+        return NULL;
+    
+    LinkedListNode * pCurrNode = g_FuncTable.pHead;
+    
+    for (int iCurrNode = 0; iCurrNode < g_FuncTable.iNodeCount; ++ iCurrNode)
+    {
+        FuncNode * pCurrFunc = ( FuncNode * ) pCurrNode->pData;
         
-        int AddString( LinkedList * pList, char * pstrString )
-        {
-            LinkedListNode * pNode = pList->pHead;
-            
-            for ( int iCurrNode = 0; iCurrNode < pList->iNodeCount; ++ iCurrNode )
-            {
-                if ( strcmp ( ( char * ) pNode->pData, pstrString ) == 0 )
-                    return iCurrNode;
-                
-                pNode = pNode->pNext;
-            }
-            
-            char * pstrStringNode = (char *) malloc (strlen ( pstrString ) + 1);
-            strcpy ( pstrStringNode, pstrString );
-            
-            return AddNode ( pList, pstrStringNode );
-        }
+        if ( strcmp ( pCurrFunc->pstrName, pstrName ) == 0 )
+            return pCurrFunc;
         
-        int AddFunc (char * pstrName, int iEntryPoint)
-        {
-            if ( GetFuncByName ( pstrName ) )
-                return -1;
-            
-            FuncNode * pNewFunc = ( FuncNode * ) malloc ( sizeof ( FuncNode ) );
-            
-            strcpy ( pNewFunc->pstrName, pstrName);
-            pNewFunc->iEntryPoint = iEntryPoint;
-            
-            int iIndex = AddNode ( & g_FuncTable, pNewFunc );
-            
-            pNewFunc->iIndex = iIndex;
-            
-            return iIndex;
-        }
+        pCurrNode = pCurrNode->pNext;
+    }
+    return NULL;
+}
+
+int AddSymbol ( char * pstrIdent, int iSize, int iStackIndex, int iFuncIndex )
+{
+    if ( GetSymbolByIdent ( pstrIdent, iFuncIndex))
+        return -1;
+    
+    SymbolNode * pNewSymbol = ( SymbolNode * )
+    malloc ( sizeof ( SymbolNode ) );
+    
+    strcpy ( pNewSymbol->pstrIdent, pstrIdent );
+    pNewSymbol->iSize = iSize;
+    pNewSymbol->iStackIndex = iStackIndex;
+    pNewSymbol->iFuncIndex = iFuncIndex;
+    
+    int iIndex = AddNode ( & g_SymbolTable, pNewSymbol );
+    
+    pNewSymbol->iIndex = iIndex;
+    
+    return iIndex;
+}
+
+SymbolNode * GetSymbolByIdent ( char * pstrIdent, int iFuncIndex )
+{
+    if ( ! g_SymbolTable.iNodeCount )
+        return NULL;
+    
+    LinkedListNode * pCurrNode = g_SymbolTable.pHead;
+    
+    for ( int iCurrNode = 0; iCurrNode < g_SymbolTable.iNodeCount; ++ iCurrNode )
+    {
+        SymbolNode * pCurrSymbol = ( SymbolNode * ) pCurrNode->pData;
         
-        void SetFuncInfo ( char * pstrName, int iParamCount, int iLocalDataSize )
-        {
-            FuncNode * pFunc = GetFuncByName ( pstrName );
-            
-            pFunc->iParamCount = iParamCount;
-            pFunc->iLocalDataSize = iLocalDataSize;
-        }
+        if ( strcmp ( pCurrSymbol->pstrIdent, pstrIdent) == 0 )
+            if ( pCurrSymbol->iFuncIndex == iFuncIndex
+                || pCurrSymbol->iStackIndex >= 0 )
+                return pCurrSymbol;
         
-        FuncNode * GetFuncByName ( char * pstrName )
-        {
-            if ( ! g_FuncTable.iNodeCount )
-                return NULL;
-            
-            LinkedListNode * pCurrNode = g_FuncTable.pHead;
-            
-            for (int iCurrNode = 0; iCurrNode < g_FuncTable.iNodeCount; ++ iCurrNode)
-            {
-                FuncNode * pCurrFunc = ( FuncNode * ) pCurrNode->pData;
-                
-                if ( strcmp ( pCurrFunc->pstrName, pstrName ) == 0 )
-                    return pCurrFunc;
-                
-                pCurrNode = pCurrNode->pNext;
-            }
-            return NULL;
-        }
+        pCurrNode = pCurrNode->pNext;
+    }
+    
+    return NULL;
+}
+
+int GetStackIndexByIndent ( char * pstrIdent, int iFuncIndex )
+{
+    SymbolNode * pSymbol = GetSymbolByIdent ( pstrIdent, iFuncIndex );
+    
+    return pSymbol->iStackIndex;
+}
+
+int GetSizeByIndent ( char * pstrIdent, int iFuncIndex )
+{
+    SymbolNode * pSymbol = GetSymbolByIdent ( pstrIdent, iFuncIndex );
+    
+    return pSymbol->iSize;
+}
+
+LabelNode * GetLabelByIdent (char * pstrIdent, int iFuncIndex)
+{
+    if (!g_LabelTable.iNodeCount)
+        return NULL;
+    
+    LinkedListNode * pCurrNode = g_LabelTable.pHead;
+    
+    for (int iCurrNode = 0; iCurrNode < g_LabelTable.iNodeCount; ++iCurrNode)
+    {
+        LabelNode * pCurrLabel = (LabelNode *) pCurrNode->pData;
         
-        int AddSymbol ( char * pstrIdent, int iSize, int iStackIndex, int iFuncIndex )
-        {
-            if ( GetSymbolByIdent ( pstrIdent, iFuncIndex))
-                return -1;
-            
-            SymbolNode * pNewSymbol = ( SymbolNode * )
-            malloc ( sizeof ( SymbolNode ) );
-            
-            strcpy ( pNewSymbol->pstrIdent, pstrIdent );
-            pNewSymbol->iSize = iSize;
-            pNewSymbol->iStackIndex = iStackIndex;
-            pNewSymbol->iFuncIndex = iFuncIndex;
-            
-            int iIndex = AddNode ( & g_SymbolTable, pNewSymbol );
-            
-            pNewSymbol->iIndex = iIndex;
-            
-            return iIndex;
-        }
+        if (strcmp(pCurrLabel->pstrIdent, pstrIdent) == 0 && pCurrLabel->iFuncIndex == iFuncIndex)
+            return pCurrLabel;
         
-        SymbolNode * GetSymbolByIdent ( char * pstrIdent, int iFuncIndex )
-        {
-            if ( ! g_SymbolTable.iNodeCount )
-                return NULL;
-            
-            LinkedListNode * pCurrNode = g_SymbolTable.pHead;
-            
-            for ( int iCurrNode = 0; iCurrNode < g_SymbolTable.iNodeCount; ++ iCurrNode )
-            {
-                SymbolNode * pCurrSymbol = ( SymbolNode * ) pCurrNode->pData;
-                
-                if ( strcmp ( pCurrSymbol->pstrIdent, pstrIdent) == 0 )
-                    if ( pCurrSymbol->iFuncIndex == iFuncIndex
-                        || pCurrSymbol->iStackIndex >= 0 )
-                        return pCurrSymbol;
-                
-                pCurrNode = pCurrNode->pNext;
-            }
-            
-            return NULL;
-        }
+        pCurrNode = pCurrNode->pNext;
+    }
+    
+    return NULL;
+}
+
+int AddLabel( char * pstrIdent, int iTargetIndex, int iFuncIndex)
+{
+    if ( GetLabelByIdent ( pstrIdent, iFuncIndex) )
+        return -1;
+    
+    LabelNode * pNewLabel = (LabelNode *) malloc ( sizeof ( LabelNode) );
+    
+    strcpy ( pNewLabel->pstrIdent, pstrIdent );
+    pNewLabel->iTargetIndex = iTargetIndex;
+    pNewLabel->iFuncIndex = iFuncIndex;
+    
+    int iIndex = AddNode ( & g_LabelTable, pNewLabel );
+    
+    pNewLabel->iIndex = iIndex;
+    
+    return iIndex;
+}
+
+LabelNode * GetLabelByIndex ( char * pstrIdent, int iFuncIndex )
+{
+    if (! g_LabelTable.iNodeCount)
+        return NULL;
+    
+    LinkedListNode * pCurrNode = g_LabelTable.pHead;
+    
+    for ( int iCurrNode = 0; iCurrNode < g_LabelTable.iNodeCount; ++ iCurrNode )
+    {
+        LabelNode * pCurrLabel = ( LabelNode * ) pCurrNode -> pData;
         
-        int GetStackIndexByIndent ( char * pstrIdent, int iFuncIndex )
-        {
-            SymbolNode * pSymbol = GetSymbolByIdent ( pstrIdent, iFuncIndex );
-            
-            return pSymbol->iStackIndex;
-        }
+        if ( strcmp ( pCurrLabel->pstrIdent, pstrIdent ) == 0
+            && pCurrLabel->iFuncIndex == iFuncIndex )
+            return pCurrLabel;
         
-        int GetSizeByIndent ( char * pstrIdent, int iFuncIndex )
+        pCurrNode = pCurrNode->pNext;
+    }
+    
+    return NULL;
+}
+
+int AddInstrLookup ( char * pstrMnemonic, int iOpcode, int iOpCount )
+{
+    static int iInstrIndex = 0;
+    
+    if ( iInstrIndex >= MAX_INSTR_LOOKUP_COUNT )
+        return -1;
+    
+    strcpy ( g_InstrTable [ iInstrIndex ].pstrMnemonic, pstrMnemonic );
+    strupr ( g_InstrTable [ iInstrIndex ].pstrMnemonic );
+    g_InstrTable [ iInstrIndex ].iOpcode = iOpcode;
+    g_InstrTable [ iInstrIndex ].iOpCount = iOpCount;
+    
+    g_InstrTable [ iInstrIndex ].OpList = ( OpTypes * )
+    malloc ( iOpCount * sizeof ( OpTypes ) );
+    
+    int iReturnInstrIndex = iInstrIndex;
+    
+    ++ iInstrIndex;
+    
+    return iReturnInstrIndex;
+}
+
+void SetOpType ( int iInstrIndex, int iOpIndex, OpTypes iOpType )
+{
+    g_InstrTable [ iInstrIndex ].OpList [ iOpIndex] = iOpIndex;
+}
+
+int GetInstrByMnemonic ( char * pstrMnemonic, InstrLookup * pInstr )
+{
+    for ( int iCurrInstrIndex = 0; iCurrInstrIndex < MAX_INSTR_LOOKUP_COUNT;
+         ++ iCurrInstrIndex )
+    {
+        if ( strcmp ( g_InstrTable [ iCurrInstrIndex ].pstrMnemonic,
+                     pstrMnemonic ) == 0 )
         {
-            SymbolNode * pSymbol = GetSymbolByIdent ( pstrIdent, iFuncIndex );
-            
-            return pSymbol->iSize;
-        }
-        
-        int AddLabel( char * pstrIdent, int iTargetIndex, int iFuncIndex)
-        {
-            if ( GetLabelByIdent ( pstrIdent, iFuncIndex) )
-                return -1;
-            
-            LabelNode * pNewLabel = (LabelNode *) malloc ( sizeof ( LabelNode) );
-            
-            strcpy ( pNewLabel->pstrIdent, pstrIdent );
-            pNewLabel->iTargetIndex = iTargetIndex;
-            pNewLabel->iFuncIndex = iFuncIndex;
-            
-            int iIndex = AddNode ( & g_LabelTable, pNewLabel );
-            
-            pNewLabel->iIndex = iIndex;
-            
-            return iIndex;
-        }
-        
-        LabelNode * GetLabelByIndex ( char * pstrIdent, int iFuncIndex )
-        {
-            if (! g_LabelTable.iNodeCount)
-                return NULL;
-            
-            LinkedListNode * pCurrNode = g_LabelTable.pHead;
-            
-            for ( int iCurrNode = 0; iCurrNode < g_LabelTable.iNodeCount; ++ iCurrNode )
-            {
-                LabelNode * pCurrLabel = ( LabelNode * ) pCurrNode -> pData;
-                
-                if ( strcmp ( pCurrLabel->pstrIdent, pstrIdent ) == 0
-                    && pCurrLabel->iFuncIndex == iFuncIndex )
-                    return pCurrLabel;
-                
-                pCurrNode = pCurrNode->pNext;
-            }
-            
-            return NULL;
-        }
-        
-        int AddInstrLookup ( char * pstrMnemonic, int iOpcode, int iOpCount )
-        {
-            static int iInstrIndex = 0;
-            
-            if ( iInstrIndex >= MAX_INSTR_LOOKUP_COUNT )
-                return -1;
-            
-            strcpy ( g_InstrTable [ iInstrIndex ].pstrMnemonic, pstrMnemonic );
-            strupr ( g_InstrTable [ iInstrIndex ].pstrMnemonic );
-            g_InstrTable [ iInstrIndex ].iOpcode = iOpcode;
-            g_InstrTable [ iInstrIndex ].iOpCount = iOpCount;
-            
-            g_InstrTable [ iInstrIndex ].OpList = ( OpTypes * )
-            malloc ( iOpCount * sizeof ( OpTypes ) );
-            
-            int iReturnInstrIndex = iInstrIndex;
-            
-            ++ iInstrIndex;
-            
-            return iReturnInstrIndex;
-        }
-        
-        void SetOpType ( int iInstrIndex, int iOpIndex, OpTypes iOpType )
-        {
-            g_InstrTable [ iInstrIndex ].OpList [ iOpIndex] = iOpIndex;
-        }
-        
-        int GetInstrByMnemonic ( char * pstrMnemonic, InstrLookup * pInstr )
-        {
-            for ( int iCurrInstrIndex = 0; iCurrInstrIndex < MAX_INSTR_LOOKUP_COUNT;
-                 ++ iCurrInstrIndex )
-            {
-                if ( strcmp ( g_InstrTable [ iCurrInstrIndex ].pstrMnemonic,
-                             pstrMnemonic ) == 0 )
-                {
-                    * pInstr = g_InstrTable [ iCurrInstrIndex ];
-                    return true;
-                }
-            }
-            
-            return false;
-        }
-        
-        int SkipToNextLine ()
-        {
-            ++ g_Lexer.iCurrSourceLine;
-            
-            if (g_Lexer.iCurrSourceLine >= g_iSourceCodeSize)
-                return false;
-            
-            g_Lexer.iIndex0 = 0;
-            g_Lexer.iIndex1 = 0;
-            
-            g_Lexer.iCurrLexState = LEX_STATE_NO_STRING;
-            
+            * pInstr = g_InstrTable [ iCurrInstrIndex ];
             return true;
         }
-        
-        void ResetLexer ();
+    }
+    
+    return false;
+}
+
+int SkipToNextLine ()
+{
+    ++ g_Lexer.iCurrSourceLine;
+    
+    if (g_Lexer.iCurrSourceLine >= g_iSourceCodeSize)
+        return false;
+    
+    g_Lexer.iIndex0 = 0;
+    g_Lexer.iIndex1 = 0;
+    
+    g_Lexer.iCurrLexState = LEX_STATE_NO_STRING;
+    
+    return true;
+}
+
+void ResetLexer ()
+{
+    g_Lexer.iCurrSourceLine = 0;
+    
+    g_Lexer.iIndex0 = 0;
+    g_Lexer.iIndex1 = 0;
+    
+    g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
+    
+    g_Lexer.iCurrLexState = LEX_STATE_NO_STRING;
+}
+
+char GetLookAheadChar ()
+{
+    int iCurrSourceLine = g_Lexer.iCurrSourceLine;
+    unsigned int iIndex = g_Lexer.iIndex1;
+    
+    if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
+    {
+        while (true)
         {
-            g_Lexer.iCurrSourceLine = 0;
+            if (iIndex >= strlen (g_ppstrSourceCode[iCurrSourceLine]))
+            {
+                iCurrSourceLine += 1;
+                
+                if (iCurrSourceLine >= g_iSourceCodeSize)
+                    return 0;
+                
+                iIndex = 0;
+            }
             
-            g_Lexer.iIndex0 = 0;
-            g_Lexer.iIndex1 = 0;
+            if (!IsCharWhitespace(g_ppstrSourceCode[iCurrSourceLine][iIndex]))
+                break;
             
-            g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
-            
-            g_Lexer.iCurrLexState = LEX_STATE_NO_STRING;
+            ++ iIndex;
+        }
+    }
+    
+    return g_ppstrSourceCode[iCurrSourceLine][iIndex];
+    
+}
+
+
+void StripComments (char * pstrSourceLine)
+{
+    unsigned int iCurrCharIndex;
+    int iInString;
+    
+    iInString = 0;
+    for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrSourceLine) - 1; ++ iCurrCharIndex)
+    {
+        if (pstrSourceLine[iCurrCharIndex] == '"')
+        {
+            if (iInString)
+                iInString = 0;
+            else
+                iInString = 1;
         }
         
-        char GetLookAheadChar ()
+        if (pstrSourceLine[iCurrCharIndex] == ';')
         {
-            int iCurrSourceLine = g_Lexer.iCurrSourceLine;
-            unsigned int iIndex = g_Lexer.iIndex1;
-            
-            if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
+            if (!iInString)
             {
-                while (true)
-                {
-                    if (iIndex >= strlen (g_ppstrSourceCode[iCurrSourceLine]))
-                    {
-                        iCurrSourceLine += 1;
-                        
-                        if (iCurrSourceLine >= g_iSourceCodeSize)
-                            return 0;
-                        
-                        iIndex = 0;
-                    }
-                    
-                    if (!IsCharWhitespace(g_ppstrSourceCode[iCurrSourceLine][iIndex]))
-                        break;
-                    
-                    ++ index;
-                }
-                
-                return g_ppstrSourceCode[iCurrSourceLine][iIndex];
+                pstrSourceLine[iCurrCharIndex] = '\n';
+                pstrSourceLine[iCurrCharIndex + 1] = '\0';
+                break;
             }
+        }
+    }
+}
+
+int IsCharWhitespace (char cChar)
+{
+    if (cChar == ' ' || cChar == '\t')
+        return true;
+    else
+        return false;
+}
+
+int IsCharNumeric (char cChar)
+{
+    if (cChar >= '0' && cChar <= '9')
+        return true;
+    else
+        return false;
+}
+
+int IsCharIdent (char cChar)
+{
+    if ((cChar >= '0' && cChar <= '9') ||
+        (cChar >= 'A' && cChar <= 'Z') ||
+        (cChar >= 'a' && cChar <= 'z') ||
+        cChar == '_')
+        return true;
+    else
+        return false;
+}
+
+int IsCharDelimiter (char cChar)
+{
+    if (cChar == ':' || cChar == ',' || cChar == '"' ||
+        cChar == '[' || cChar == ']' || cChar == '{' ||
+        cChar == '}' || IsCharWhitespace (cChar) || cChar == '\n')
+        return true;
+    else
+        return false;
+}
+
+void TrimWhitespace (char * pstrString)
+{
+    unsigned int iStringLength = strlen (pstrString);
+    unsigned int iPadLength;
+    unsigned int iCurrCharIndex;
+    
+    if (iStringLength > 1)
+    {
+        for (iCurrCharIndex = 0; iCurrCharIndex < iStringLength; ++ iCurrCharIndex)
+            if (!IsCharWhitespace (pstrString[iCurrCharIndex]))
+                break;
+        
+        iPadLength = iCurrCharIndex;
+        if (iPadLength)
+        {
+            for (iCurrCharIndex = iPadLength; iCurrCharIndex < iStringLength;
+                 ++ iCurrCharIndex)
+                pstrString[iCurrCharIndex - iPadLength] = pstrString[iCurrCharIndex];
             
-            
-            void StripComments (char * pstrSourceLine)
+            for (iCurrCharIndex = iStringLength - iPadLength;
+                 iCurrCharIndex < iStringLength; ++ iCurrCharIndex)
+                pstrString[iCurrCharIndex] = ' ';
+        }
+        
+        for (iCurrCharIndex = iStringLength - 1; iCurrCharIndex > 0;
+             -- iCurrCharIndex)
+        {
+            if (!IsCharWhitespace(pstrString[iCurrCharIndex]))
             {
-                unsigned int iCurrCharIndex;
-                int iInString;
-                
-                iInString = 0;
-                for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrSourceLine) - 1; ++ iCurrCharIndex)
-                {
-                    if (pstrSourceLine[iCurrCharIndex] == '"')
-                    {
-                        if (iInString)
-                            iInString = 0;
-                        else
-                            iInString = 1;
-                    }
-                    
-                    if (pstrSourceLine[iCurrCharIndex] == ';')
-                    {
-                        if (!iInString)
-                        {
-                            pstrSourceLine[iCurrCharIndex] = '\n';
-                            pstrSourceLine[iCurrCharIndex + 1] = '\0';
-                            break;
-                        }
-                    }
-                }
+                pstrString[iCurrCharIndex + 1] = '\0';
+                break;
             }
+        }
+    }
+}
+
+int IsStringWhitespace (char * pstrString)
+{
+    if (!pstrString)
+        return false;
+    
+    if (strlen (pstrString) == 0)
+        return true;
+    
+    for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
+         ++ iCurrCharIndex)
+        if (!IsCharWhitespace (pstrString[iCurrCharIndex]) &&
+            pstrString[iCurrCharIndex != '\n'])
+            return false;
+    return true;
+}
+
+int IsStringIdent (char * pstrString)
+{
+    if (!pstrString)
+        return false;
+    
+    if (strlen(pstrString) == 0)
+        return false;
+    
+    if (pstrString[0] >= '0' && pstrString[0] <= '9')
+        return false;
+    
+    for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
+         ++ iCurrCharIndex)
+        if (!IsCharIdent(pstrString[iCurrCharIndex]))
+            return false;
+    return true;
+}
+
+int IsStringInteger (char * pstrString)
+{
+    if (!pstrString)
+        return false;
+    
+    if (strlen(pstrString) == 0)
+        return false;
+    
+    unsigned int iCurrCharIndex;
+    
+    for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+        if (!IsCharNumeric (pstrString[iCurrCharIndex]) &&
+            !(pstrString[iCurrCharIndex] == '-'))
+            return false;
+    
+    for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+        if (pstrString[iCurrCharIndex == '-'])
+            return false;
+    
+    return true;
+}
+
+
+int IsStringFloat(char * pstrString)
+{
+    if (!pstrString)
+        return false;
+    
+    if (strlen (pstrString) == 0)
+        return false;
+    
+    unsigned int iCurrCharIndex;
+    
+    for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+        if (!IsCharNumeric (pstrString[iCurrCharIndex]) &&
+            !(pstrString[iCurrCharIndex] == '.') &&
+            !(pstrString[iCurrCharIndex] == '-'))
+            return false;
+    
+    int iRadixPointFound = 0;
+    
+    for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+    {
+        if (pstrString[iCurrCharIndex] == '.')
+        {
+            if (iRadixPointFound)
+                return false;
+            else
+                iRadixPointFound = 1;
+        }
+    }
+    
+    for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
+        if (pstrString[iCurrCharIndex] == '-')
+            return false;
+    
+    if (iRadixPointFound)
+        return true;
+    else
+        return false;
+}
+
+
+
+
+
+
+Token GetNextToken ()
+{
+    g_Lexer.iIndex0 = g_Lexer.iIndex1;
+    
+    if ( g_Lexer.iIndex0 >= strlen ( g_ppstrSourceCode [ g_Lexer.iCurrSourceLine ]))
+    {
+        if (!SkipToNextLine())
+            return END_OF_TOKEN_STREAM;
+    }
+    
+    if (g_Lexer.iCurrLexState == LEX_STATE_END_STRING)
+        g_Lexer.iCurrLexState = LEX_STATE_NO_STRING;
+    
+    if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
+    {
+        while (true)
+        {
+            if (!IsCharWhitespace(g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
+                                  [g_Lexer.iIndex0]))
+                break;
             
-            int IsCharWhitespace (char cChar)
+            ++ g_Lexer.iIndex0;
+        }
+    }
+    
+    g_Lexer.iIndex1 = g_Lexer.iIndex0;
+    
+    while (true)
+    {
+        if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
+        {
+            if (g_Lexer.iIndex1 >=
+                strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
             {
-                if (cChar == ' ' || cChar == '\t')
-                    return true;
-                else
-                    return false;
-            }
-            
-            int IsCharNumeric (char cChar)
-            {
-                if (cChar >= '0' && cChar <= '9')
-                    return true;
-                else
-                    return false;
-            }
-            
-            int IsCharIdent (char cChar)
-            {
-                if ((cChar >= '0' && cChar <= '9') ||
-                    (cChar >= 'A' && cChar <= 'Z') ||
-                    (cChar >= 'a' && cChar <= 'z') ||
-                    cChar == '_')
-                    return true;
-                else
-                    return false;
-            }
-            
-            int IsCharDelimiter (char cChar)
-            {
-                if (cChar == ':' || cChar == ',' || cChar == '"' ||
-                    cChar == '[' || cChar == ']' || cChar == '{' ||
-                    cChar == '}' || IsCharWhitespace (cChar) || cChar == '\n')
-                    return true;
-                else
-                    return false;
-            }
-            
-            void TrimWhitespace (char * pstrString)
-            {
-                unsigned int iStringLength = strlen (pstrString);
-                unsigned int iPadLength;
-                unsigned int iCurrCharIndex;
-                
-                if (iStringLength > 1)
-                {
-                    for (iCurrCharIndex = 0; iCurrCharIndex < iStringLength; ++ iCurrCharIndex)
-                        if (!IsCharWhitespace (pstrString[iCurrCharIndex]))
-                            break;
-                    
-                    iPadLength = iCurrCharIndex;
-                    if (iPadLength)
-                    {
-                        for (iCurrCharIndex = iPadLength; iCurrCharIndex < iStringLength;
-                             ++ iCurrCharIndex)
-                            pstrString[iCurrCharIndex - iPadLength] = pstrString[iCurrCharIndex];
-                        
-                        for (iCurrCharIndex = iStringLength - iPadLength;
-                             iCurrCharIndex < iStringLength; ++ iCurrCharIndex)
-                            pstrString[iCurrCharIndex] = ' ';
-                    }
-                    
-                    for (iCurrCharIndex = iStringLength - 1; iCurrCharIndex > 0;
-                         -- iCurrCharIndex)
-                    {
-                        if (!IsCharWhitespace(pstrString[iCurrCharIndex]))
-                        {
-                            pstrString[iCurrCharIndex + 1] = '\0';
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            int IsStringWhitespace (char * pstrString)
-            {
-                if (!pstrString)
-                    return false;
-                
-                if (strlen (pstrString) == 0)
-                    return true;
-                
-                for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
-                     ++ iCurrCharIndex)
-                    if (!IsCharWhitespace (pstrString[iCurrCharIndex]) && 
-                        pstrString[iCurrCharIndex != '\n'])
-                        return false;
-                return true;
-            }
-            
-            int IsStringIdent (char * pstrString)
-            {
-                if (!pstrString)
-                    return false;
-                
-                if (strlen(pstrString) == 0)
-                    return false;
-                
-                if (pstrString[0] >= '0' && pstrString[0] <= '9')
-                    return false;
-                
-                for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
-                     ++ iCurrCharIndex)
-                    if (!IsCharIdent(pstrString[iCurrCharIndex]))
-                        return false;
-                return true;
-            }
-            
-            int IsStringInteger (char * pstrString)
-            {
-                if (!pstrString)
-                    return false;
-                
-                if (strlen(pstrString) == 0)
-                    return false;
-                
-                unsigned int iCurrCharIndex;
-                
-                for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-                    if (!IsCharNumeric (pstrString[iCurrCharIndex]) && 
-                        !(pstrString[iCurrCharIndex] == '-'))
-                        return false;
-                
-                for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-                    if (pstrString[iCurrCharIndex == '-'])
-                        return false;
-                
-                return true;
-            }
-            
-            
-            int IsStringFloat(char * pstrString)
-            {
-                if (!pstrString)
-                    return false;
-                
-                if (strlen (pstrString) == 0)
-                    return false;
-                
-                unsigned int iCurrCharIndex;
-                
-                for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-                    if (!IsCharNumeric (pstrString[iCurrCharIndex]) && 
-                        !(pstrString[iCurrCharIndex] == '.') &&
-                        !(pstrString[iCurrCharIndex] == '-'))
-                        return false;
-                
-                int iRadixPointFound = 0;
-                
-                for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-                {
-                    if (pstrString[iCurrCharIndex] == '.')
-                    {
-                        if (iRadixPointFound)
-                            return false;
-                        else
-                            iRadixPointFound = 1;
-                    }
-                }
-                
-                for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-                    if (pstrString[iCurrCharIndex] == '-')
-                        return false;
-                
-                if (iRadixPointFound)
-                    return true;
-                else
-                    return false;
-            }
-            
-            
-            
-            
-            
-            
-            Token GetNextToken ()
-            {
-                g_Lexer.iIndex0 = g_Lexer.iIndex1;
-                
-                if ( g_Lexer.iIndex0 >= strlen ( g_ppstrSourceCode [ g_Lexer.iCurrSourceLine ]))
-                {
-                    if (!SkipToNextLine())
-                        return END_OF_TOKEN_STREAM;
-                }
-                
-                if (g_Lexer.iCurrLexState == LEX_STATE_END_STRING)
-                    g_Lexer.iCurrLexState = LEX_STATE_NO_STRING;
-                
-                if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
-                {
-                    while (true)
-                    {
-                        if (!IsCharWhitespace(g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
-                                              [g_Lexer.iIndex0]))
-                            break;
-                        
-                        ++ g_Lexer.iIndex0;
-                    }
-                }
-                
-                g_Lexer.iIndex1 = g_Lexer.iIndex0;
-                
-                while (true)
-                {
-                    if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
-                    {
-                        if (g_Lexer.iIndex1 >= 
-                            strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
-                        {
-                            g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
-                            return g_Lexer.CurrToken;
-                        }
-                        
-                        if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1] == '\\')
-                        {
-                            g_Lexer.iIndex1 += 2;
-                            continue;
-                        }
-                        
-                        if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1] == '"')
-                            break;
-                        
-                        ++ g_Lexer.iIndex1;
-                    }
-                    
-                    else
-                    {
-                        if (g_Lexer.iIndex1 >= 
-                            strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
-                            break;
-                        
-                        if (IsCharDelimiter (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
-                                             [g_Lexer.iIndex1]))
-                            break;	
-                        
-                        ++ g_Lexer.iIndex1;
-                    }
-                }
-                
-                if (g_Lexer.iIndex1 - g_Lexer.iIndex0 == 0)
-                    ++ g_Lexer.iIndex1;
-                
-                unsigned int iCurrDestIndex = 0;
-                for (unsigned int iCurrSourceIndex = g_Lexer.iIndex0; 
-                     iCurrSourceIndex < g_Lexer.iIndex1; ++ iCurrSourceIndex)
-                {
-                    if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
-                        if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex] 
-                            == '\\')
-                            ++ iCurrSourceIndex;
-                    
-                    g_Lexer.pstrCurrLexeme[iCurrDestIndex] = 
-                    g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex];
-                    
-                    ++ iCurrDestIndex;
-                }
-                
-                g_Lexer.pstrCurrLexeme[iCurrDestIndex] = '\0';
-                
-                if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
-                    strupr (g_Lexer.pstrCurrLexeme);
-                
                 g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
-                
-                if (strlen(g_Lexer.pstrCurrLexeme) > 1 || g_Lexer.pstrCurrLexeme[0] != '"')
-                {
-                    if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
-                    {
-                        g_Lexer.CurrToken = TOKEN_TYPE_STRING;
-                        return TOKEN_TYPE_STRING;
-                    }
-                }
-                
-                if (strlen (g_Lexer.pstrCurrLexeme) == 1)
-                {
-                    switch (g_Lexer.pstrCurrLexeme[0])
-                    {
-                        case '"':
-                            switch (g_Lexer.iCurrLexState)
-                        {
-                            case LEX_STATE_NO_STRING:
-                                g_Lexer.iCurrLexState = LEX_STATE_IN_STRING;
-                                break;
-                                
-                            case LEX_STATE_IN_STRING:
-                                g_Lexer.iCurrLexState = LEX_STATE_END_STRING;
-                                break;
-                        }
-                            
-                            g_Lexer.CurrToken = TOKEN_TYPE_QUOTE;
-                            
-                        case ',':
-                            g_Lexer.CurrToken = TOKEN_TYPE_COMMA;
-                            break;
-                            
-                        case ':':
-                            g_Lexer.CurrToken = TOKEN_TYPE_COLON;
-                            break;
-                            
-                        case '[':
-                            g_Lexer.CurrToken = TOKEN_TYPE_OPEN_BRACKET;
-                            break;
-                            
-                        case ']':
-                            g_Lexer.CurrToken = TOKEN_TYPE_CLOSE_BRACKET;
-                            break;
-                            
-                        case '{':
-                            g_Lexer.CurrToken = TOKEN_TYPE_OPEN_BRACE;
-                            break;
-                            
-                        case '}':
-                            g_Lexer.CurrToken = TOKEN_TYPE_CLOSE_BRACE;
-                            break;
-                            
-                        case '\n':
-                            g_Lexer.CurrToken = TOKEN_TYPE_NEWLINE;
-                            break;
-                    }
-                }
-                
-                if (IsStringInteger (g_Lexer.pstrCurrLexeme))
-                    g_Lexer.CurrToken = TOKEN_TYPE_INT;
-                
-                if (IsStringFloat (g_Lexer.pstrCurrLexeme))
-                    g_Lexer.CurrToken = TOKEN_TYPE_FLOAT;
-                
-                if (IsStringIdent (g_Lexer.pstrCurrLexeme))
-                    g_Lexer.CurrToken = TOKEN_TYPE_IDENT;
-                
-                if (strcmp(g_Lexer.pstrCurrLexeme, "SETSTACKSIZE") == 0)
-                    g_Lexer.CurrToken = TOKEN_TYPE_SETSTACKSIZE;
-                
-                if (strcmp(g_Lexer.pstrCurrLexeme, "VAR") == 0)
-                    g_Lexer.CurrToken = TOKEN_TYPE_VAR;
-                
-                if (strcmp(g_Lexer.pstrCurrLexeme, "FUNC") == 0)
-                    g_Lexer.CurrToken = TOKEN_TYPE_FUNC;
-                
-                if (strcmp(g_Lexer.pstrCurrLexeme, "_RETVAL") == 0)
-                    g_Lexer.CurrToken = TOKEN_TYPE_REG_RETVAL;
-                
-                InstrLookup Instr;
-                
-                if (GetInstrByMnemonic(g_Lexer.pstrCurrLexeme, & Instr))
-                    g_Lexer.CurrToken = TOKEN_TYPE_INSTR;
-                
                 return g_Lexer.CurrToken;
             }
             
-            void ExitOnError (char * pstrErrorMssg)
+            if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1] == '\\')
             {
-                printf ("Fatal Error: %s.\n", pstrErrorMssg);
-                
-                Exit ();
+                g_Lexer.iIndex1 += 2;
+                continue;
             }
             
-            void ExitOnCodeError (char * pstrErrorMssg)
-            {
-                printf ("Error: %s. \n\n", pstrErrorMssg);
-                printf ("Line %d\n", g_Lexer.iCurrSourceLine);
-                
-                char pstrSourceLine[MAX_SOURCE_LINE_SIZE];
-                strcpy (pstrSourceLine, g_ppstrSourceCode[g_Lexer.iCurrSourceLine]);
-                
-                for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen(pstrSourceLine); 
-                     ++ icurrchar)
-                {
-                    if (pstrSourceLine[iCurrCharIndex] == '\t')
-                        pstrSourceLine[iCurrFuncIndex] = ' ';
-                }
-                
-                printf ("%s", pstrSourceLine);
-                
-                for (unsigned int iCurrSpace = 0; iCurrSpace < g_Lexer.iIndex0; ++ iCurrSpace)
-                    printf (" ");
-                printf ("^\n");
-                
-                printf ("Could not assemble %s.\n", g_pstrSourceFilename);
-                
-                Exit();
-            }
+            if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1] == '"')
+                break;
             
-            void ExitOnCharExpectedError (char cChar)
+            ++ g_Lexer.iIndex1;
+        }
+        
+        else
+        {
+            if (g_Lexer.iIndex1 >=
+                strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
+                break;
+            
+            if (IsCharDelimiter (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
+                                 [g_Lexer.iIndex1]))
+                break;
+            
+            ++ g_Lexer.iIndex1;
+        }
+    }
+    
+    if (g_Lexer.iIndex1 - g_Lexer.iIndex0 == 0)
+        ++ g_Lexer.iIndex1;
+    
+    unsigned int iCurrDestIndex = 0;
+    for (unsigned int iCurrSourceIndex = g_Lexer.iIndex0;
+         iCurrSourceIndex < g_Lexer.iIndex1; ++ iCurrSourceIndex)
+    {
+        if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
+            if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex]
+                == '\\')
+                ++ iCurrSourceIndex;
+        
+        g_Lexer.pstrCurrLexeme[iCurrDestIndex] =
+        g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex];
+        
+        ++ iCurrDestIndex;
+    }
+    
+    g_Lexer.pstrCurrLexeme[iCurrDestIndex] = '\0';
+    
+    if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
+        strupr (g_Lexer.pstrCurrLexeme);
+    
+    g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
+    
+    if (strlen(g_Lexer.pstrCurrLexeme) > 1 || g_Lexer.pstrCurrLexeme[0] != '"')
+    {
+        if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
+        {
+            g_Lexer.CurrToken = TOKEN_TYPE_STRING;
+            return TOKEN_TYPE_STRING;
+        }
+    }
+    
+    if (strlen (g_Lexer.pstrCurrLexeme) == 1)
+    {
+        switch (g_Lexer.pstrCurrLexeme[0])
+        {
+            case '"':
+                switch (g_Lexer.iCurrLexState)
             {
-                char * pstrErrorMssg = (char *) malloc (strlen ("' ' expected"));
-                sprintf (pstrErrorMssg, "'%c' expected", cChar);
-                
-                ExitOnCodeError(pstrErrorMssg);
+                case LEX_STATE_NO_STRING:
+                    g_Lexer.iCurrLexState = LEX_STATE_IN_STRING;
+                    break;
+                    
+                case LEX_STATE_IN_STRING:
+                    g_Lexer.iCurrLexState = LEX_STATE_END_STRING;
+                    break;
             }
+                
+                g_Lexer.CurrToken = TOKEN_TYPE_QUOTE;
+                
+            case ',':
+                g_Lexer.CurrToken = TOKEN_TYPE_COMMA;
+                break;
+                
+            case ':':
+                g_Lexer.CurrToken = TOKEN_TYPE_COLON;
+                break;
+                
+            case '[':
+                g_Lexer.CurrToken = TOKEN_TYPE_OPEN_BRACKET;
+                break;
+                
+            case ']':
+                g_Lexer.CurrToken = TOKEN_TYPE_CLOSE_BRACKET;
+                break;
+                
+            case '{':
+                g_Lexer.CurrToken = TOKEN_TYPE_OPEN_BRACE;
+                break;
+                
+            case '}':
+                g_Lexer.CurrToken = TOKEN_TYPE_CLOSE_BRACE;
+                break;
+                
+            case '\n':
+                g_Lexer.CurrToken = TOKEN_TYPE_NEWLINE;
+                break;
+        }
+    }
+    
+    if (IsStringInteger (g_Lexer.pstrCurrLexeme))
+        g_Lexer.CurrToken = TOKEN_TYPE_INT;
+    
+    if (IsStringFloat (g_Lexer.pstrCurrLexeme))
+        g_Lexer.CurrToken = TOKEN_TYPE_FLOAT;
+    
+    if (IsStringIdent (g_Lexer.pstrCurrLexeme))
+        g_Lexer.CurrToken = TOKEN_TYPE_IDENT;
+    
+    if (strcmp(g_Lexer.pstrCurrLexeme, "SETSTACKSIZE") == 0)
+        g_Lexer.CurrToken = TOKEN_TYPE_SETSTACKSIZE;
+    
+    if (strcmp(g_Lexer.pstrCurrLexeme, "VAR") == 0)
+        g_Lexer.CurrToken = TOKEN_TYPE_VAR;
+    
+    if (strcmp(g_Lexer.pstrCurrLexeme, "FUNC") == 0)
+        g_Lexer.CurrToken = TOKEN_TYPE_FUNC;
+    
+    if (strcmp(g_Lexer.pstrCurrLexeme, "_RETVAL") == 0)
+        g_Lexer.CurrToken = TOKEN_TYPE_REG_RETVAL;
+    
+    InstrLookup Instr;
+    
+    if (GetInstrByMnemonic(g_Lexer.pstrCurrLexeme, & Instr))
+        g_Lexer.CurrToken = TOKEN_TYPE_INSTR;
+    
+    return g_Lexer.CurrToken;
+}
+
+void ShutDown ()
+{
+    // ---- Free source code array
+    
+    // Free each source line individually
+    
+    for ( int iCurrLineIndex = 0; iCurrLineIndex < g_iSourceCodeSize; ++ iCurrLineIndex )
+        free ( g_ppstrSourceCode [ iCurrLineIndex ] );
+    
+    // Now free the base pointer
+    
+    free ( g_ppstrSourceCode );
+    
+    // ---- Free the assembled instruction stream
+    
+    if ( g_pInstrStream )
+    {
+        // Free each instruction's operand list
+        
+        for ( int iCurrInstrIndex = 0; iCurrInstrIndex < g_iInstrStreamSize; ++ iCurrInstrIndex )
+            if ( g_pInstrStream [ iCurrInstrIndex ].pOpList )
+                free ( g_pInstrStream [ iCurrInstrIndex ].pOpList );
+        
+        // Now free the stream itself
+        
+        free ( g_pInstrStream );
+    }
+    
+    // ---- Free the tables
+    
+    FreeLinkedList ( & g_SymbolTable );
+    FreeLinkedList ( & g_LabelTable );
+    FreeLinkedList ( & g_FuncTable );
+    FreeLinkedList ( & g_StringTable );
+    FreeLinkedList ( & g_HostAPICallTable );
+}
+
+void Exit ()
+{
+    ShutDown ();
+    
+    exit (0);
+}
+
+void ExitOnError (char * pstrErrorMssg)
+{
+    printf ("Fatal Error: %s.\n", pstrErrorMssg);
+    
+    Exit ();
+}
+
+void ExitOnCodeError (const char * pstrErrorMssg)
+{
+    printf ("Error: %s. \n\n", pstrErrorMssg);
+    printf ("Line %d\n", g_Lexer.iCurrSourceLine);
+    
+    char pstrSourceLine[MAX_SOURCE_LINE_SIZE];
+    strcpy (pstrSourceLine, g_ppstrSourceCode[g_Lexer.iCurrSourceLine]);
+    
+    for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen(pstrSourceLine);
+         ++ iCurrCharIndex)
+    {
+        if (pstrSourceLine[iCurrCharIndex] == '\t')
+            pstrSourceLine[iCurrCharIndex] = ' ';
+    }
+    
+    printf ("%s", pstrSourceLine);
+    
+    for (unsigned int iCurrSpace = 0; iCurrSpace < g_Lexer.iIndex0; ++ iCurrSpace)
+        printf (" ");
+    printf ("^\n");
+    
+    printf ("Could not assemble %s.\n", g_pstrExecFilename);
+    
+    Exit();
+}
+
+void ExitOnCharExpectedError (char cChar)
+{
+    char * pstrErrorMssg = (char *) malloc (strlen ("' ' expected"));
+    sprintf (pstrErrorMssg, "'%c' expected", cChar);
+    
+    ExitOnCodeError(pstrErrorMssg);
+}
+
+// ---- Main -----
+
+int main (int argc, char * argv[])
+{
+    
+}
