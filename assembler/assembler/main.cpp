@@ -325,15 +325,15 @@ typedef int Token;
 
 typedef struct _Lexer
 {
-    int iCurrSourceLine;
+    int iCurrSourceLine;                            // Current line in the source
     
-    unsigned int iIndex0,
+    unsigned int iIndex0,                           // Indices into the string
     iIndex1;
     
-    Token CurrToken;
-    char pstrCurrLexeme [ MAX_LEXEME_SIZE ];
+    Token CurrToken;                                // Current token
+    char pstrCurrLexeme [ MAX_LEXEME_SIZE ];        // Current lexeme
     
-    int iCurrLexState;
+    int iCurrLexState;                              // The current lex state
 }
 Lexer;
 
@@ -350,12 +350,14 @@ char g_pstrSourceFilename[MAX_FILENAME_SIZE], g_pstrExecFilename[MAX_FILENAME_SI
 InstrLookup g_InstrTable [ MAX_INSTR_LOOKUP_COUNT ];
 
 // The assembled instruction stream
-Instr * g_pInstrStream = NULL;
-int g_iInstrStreamSize;
+Instr * g_pInstrStream = NULL;                      // Pointer to a dynamically allocated instruction stream
+int g_iInstrStreamSize;                             // The number of instructions
+int g_iCurrInstrIndex;                              // The current instruction's index
 
 // The script header
 ScriptHeader g_ScriptHeader;
 int g_iIsSetStackSizeFound;
+
 
 // The main tables
 LinkedList g_StringTable;
@@ -541,7 +543,60 @@ void AssmblSourceFile ()
                 
                 break;
             }
+            
+            case TOKEN_TYPE_IDENT:
+            {
+                if (GetLookAheadChar() != ':')
+                    ExitOnCodeError(ERROR_MSSG_INVALID_INSTR);
                 
+                if (!iIsFuncActive)
+                    ExitOnCodeError(ERROR_MSSG_GLOBAL_LINE_LABEL);
+                
+                char * pstrIdent = GetCurrLexeme();
+                
+                int iTargetIndex = g_iInstrStreamSize - 1;
+                
+                int iFuncIndex = iCurrFuncIndex;
+                
+                if (AddLabel(pstrIdent, iTargetIndex, iFuncIndex) == -1)
+                    ExitOnCodeError(ERROR_MSSG_LINE_LABEL_REDEFINITION);
+                
+                break;
+                
+            }
+            
+        }
+        
+        while (true)
+        {
+            if (GetNextToken() == END_OF_TOKEN_STREAM)
+                break;
+            
+            switch (g_Lexer.CurrToken) {
+                case TOKEN_TYPE_PARAM:
+                {
+                    if (GetNextToken() != TOKEN_TYPE_IDENT)
+                        ExitOnCodeError(ERROR_MSSG_IDENT_EXPECTED);
+                    
+                    char * pstrIdent = GetCurrLexeme();
+                    
+                    int iStackIndex = - (pCurrFunc->iLocalDataSize + 2 + (iCurrFuncParamCount + 1));
+                    
+                    if (AddSymbol(pstrIdent, 1, iStackIndex, iCurrFuncIndex) == -1)
+                        ExitOnCodeError(ERROR_MSSG_IDENT_REDEFINITION);
+                    
+                    ++ iCurrFuncParamCount;
+                    
+                    break;
+                }
+                    
+                case TOKEN_TYPE_INSTR:
+                {
+                    GetInstrByMnemonic(GetCurrLexeme(), & CurrInstr);
+                    
+                    // TODO
+                }
+            }
         }
     }
 }
@@ -830,8 +885,7 @@ void SetOpType ( int iInstrIndex, int iOpIndex, OpTypes iOpType )
 
 int GetInstrByMnemonic ( char * pstrMnemonic, InstrLookup * pInstr )
 {
-    for ( int iCurrInstrIndex = 0; iCurrInstrIndex < MAX_INSTR_LOOKUP_COUNT;
-         ++ iCurrInstrIndex )
+    for ( int iCurrInstrIndex = 0; iCurrInstrIndex < MAX_INSTR_LOOKUP_COUNT; ++ iCurrInstrIndex )
     {
         if ( strcmp ( g_InstrTable [ iCurrInstrIndex ].pstrMnemonic,
                      pstrMnemonic ) == 0 )
