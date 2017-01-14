@@ -349,6 +349,7 @@ int g_iInstrStreamSize;
 
 // The script header
 ScriptHeader g_ScriptHeader;
+int g_iIsSetStackSizeFound;
 
 // The main tables
 LinkedList g_StringTable;
@@ -365,7 +366,7 @@ void SetFuncInfo ( char * pstrName, int iParamCount, int iLocalDataSize );
 
 int AddSymbol ( char * pstrIdent, int iSize, int iStackIndex, int iFuncIndex );
 SymbolNode * GetSymbolByIdent ( char * pstrIdent, int iFuncIndex );
-int GetStackIndexByIdent ( char * pstrIndent, int iFuncIndex );
+int GetStackIndexByIdent ( char * pstrIdent, int iFuncIndex );
 int GetSizeByIdent ( char * pstrIdent, int iFuncIndex );
 
 int AddLabel ( char * pstrIdent, int iTargetIndex, int iFuncIndex );
@@ -379,6 +380,10 @@ int SkipToNextLine();
 void ResetLexer();
 
 void strupr(char * pstrString);
+void Exit ();
+void ExitOnError (char * pstrErrorMssg);
+void ExitOnCodeError (char * pstrErrorMssg);
+void ExitOnCharExpectedError (char cChar);
 
 // ---- Functions ----
 void AssmblSourceFile ()
@@ -426,6 +431,103 @@ void AssmblSourceFile ()
 				break;
 			}
 
+			case TOKEN_TYPE_FUNC:
+			{
+				if (iIsFuncActive)
+					ExitOnCodeError (ERROR_MSSG_NESTED_FUNC);
+
+				if (GetNextToken () != TOKEN_TYPE_IDENT)
+					ExitOnCodeError (ERROR_MSSG_IDENT_EXPECTED);
+				char * pstrFuncName = GetCurrLexeme ();
+
+				int iEntryPoint = g_iInstrStreamSize;
+
+				int iFuncIndex = AddFunc (pstrFuncName, iEntryPoint);
+				if (iFuncIndex == -1)
+					ExitOnCodeError (ERROR_MSSG_FUNC_REDEFINITION);
+
+				if (strcmp (pstrFuncName, MAIN_FUNC_NAME) == 0)
+				{
+					g_ScriptHeader.iIsMainFuncPresent = true;
+					g_ScriptHeader.iMainFuncIndex = iFuncIndex;
+				}
+
+				iIsFuncActive = true;
+				strcpy (pstrCurrFuncName, pstrFuncName);
+				iCurrFuncIndex = iFuncIndex;
+				iCurrFuncParamCount = 0;
+				iCurrFuncLocalDataSize = 0;
+
+				while (GetNextToken () == TOKEN_TYPE_OPEN_BRACE);
+
+				if (g_Lexer.CurrToken != TOKEN_TYPE_OPEN_BRACE)
+					ExitOnCharExpectedError ('{');
+
+				++ g_iInstrStreamSize;
+
+				break;
+			}
+
+			case TOKEN_TYPE_CLOSE_BRACE:
+			{
+				if (!iIsFuncActive)
+					ExitOnCharExpectedError ('}');
+
+				SetFuncInfo (pstrCurrFuncName, iCurrFuncParamCount,
+					   	iCurrFuncLocalDataSize);
+
+				iIsFuncActive = false;
+				break;
+			}
+
+			case TOKEN_TYPE_VAR:
+			{
+				if (GetNextToken () != TOKEN_TYPE_IDENT)
+					ExitOnCodeError (ERROR_MSSG_IDENT_EXPECTED);
+				char pstrIdent[MAX_IDENT_SIZE];
+				strcpy (pstrIdent, GetCurrLexeme ());
+
+				int iSize = 1;
+				
+				if (GetLookAheadChar () == '[')
+				{
+					if (GetNextToken () != TOKEN_TYPE_OPEN_BRACKET)
+						ExitOnCharExpectedError('[');
+					
+					if (GetNextToken () != TOKEN_TYPE_INT)
+						ExitOnCodeError (ERROR_MSSG_INVALID_ARRAY_SIZE);
+					iSize = atoi (GetCurrLexeme ());
+
+					if (iSize <= 0)
+						ExitOnCodeError (ERROR_MSSG_INVALID_ARRAY_SIZE);
+					if (GetNextToken () != TOKEN_TYPE_CLOSE_BRACKET)
+						ExitOnCharExpectedError (']');
+				}	
+
+				int iStackIndex;
+				if (iIsFuncActive)
+				{
+					iStackIndex = -(iCurrFuncLocalDataSize + 2);
+				}
+				else
+				{
+					iStackIndex = g_ScriptHeader.iGlobalDataSize;
+				}
+
+				if (AddSymbol (pstrIdent, iSize, iStackIndex, iCurrFuncIndex) == -1)
+					ExitOnCodeError (ERROR_MSSG_IDENT_REDEFINITION);
+
+				if (iIsFuncActive)
+				{
+					iCurrFuncLocalDataSize += iSize;
+				}
+				else
+				{
+					g_ScriptHeader.iGlobalDataSize += iSize;
+				}
+
+				break;
+			}
 
 } 
 
@@ -1142,7 +1244,7 @@ char GetLookAheadChar ()
 		Exit ();
 	}
 
-	void ExitOnCodeError (char * pstrErrorMssgr)
+	void ExitOnCodeError (char * pstrErrorMssg)
 	{
 		printf ("Error: %s. \n\n", pstrErrorMssg);
 		printf ("Line %d\n", g_Lexer.iCurrSourceLine);
