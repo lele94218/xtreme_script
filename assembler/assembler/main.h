@@ -158,6 +158,9 @@
 #define ERROR_MSSG_INVALID_INPUT	\
 "Invalid input"
 
+#define ERROR_MSSG_INVALID_FILE     \
+"Could not open executable file for output"
+
 #define ERROR_MSSG_LOCAL_SETSTACKSIZE	\
 "SetStackSize can only appear in the global scope"
 
@@ -392,6 +395,8 @@ void ResetLexer ();
 Token GetNextToken();
 char GetLookAheadChar ();
 char * GetCurrLexeme ();
+
+void BuildXSE();
 
 void strupr(char * pstrString);
 void Exit ();

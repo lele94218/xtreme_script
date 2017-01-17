@@ -27,7 +27,7 @@ void AssmblSourceFile ()
     
     int iIsFuncActive = false;
     FuncNode * pCurrFunc;
-    int iCurrFuncIndex;
+    int iCurrFuncIndex = 0;
     char pstrCurrFuncName[MAX_IDENT_SIZE];
     int iCurrFuncParamCount = 0;
     int iCurrFuncLocalDataSize = 0;
@@ -158,7 +158,7 @@ void AssmblSourceFile ()
                 
                 break;
             }
-            
+                
             case TOKEN_TYPE_IDENT:
             {
                 if (GetLookAheadChar() != ':')
@@ -179,7 +179,7 @@ void AssmblSourceFile ()
                 break;
                 
             }
-            
+                
         }
         
         while (true)
@@ -987,7 +987,7 @@ int IsCharDelimiter (char cChar)
 
 void TrimWhitespace (char * pstrString)
 {
-    unsigned int iStringLength = strlen (pstrString);
+    unsigned int iStringLength = (int) strlen (pstrString);
     unsigned int iPadLength;
     unsigned int iCurrCharIndex;
     
@@ -1380,6 +1380,190 @@ void ExitOnCharExpectedError (char cChar)
     sprintf (pstrErrorMssg, "'%c' expected", cChar);
     
     ExitOnCodeError(pstrErrorMssg);
+}
+
+void BuildXSE ()
+{
+    FILE * pExecFile;
+    if (!(pExecFile = fopen(g_pstrExecFilename, "wb")))
+        ExitOnCodeError(ERROR_MSSG_INVALID_FILE);
+    
+    fwrite (XSE_ID_STRING, 4, 2, pExecFile);
+    
+    char cVersionMajor = VERSION_MAJOR, cVersionMinor = VERSION_MINOR;
+    
+    fwrite(& cVersionMajor, 1, 1, pExecFile);
+    fwrite(& cVersionMinor, 1, 1, pExecFile);
+    
+    fwrite(& g_ScriptHeader.iStackSize, 4, 1, pExecFile);
+    fwrite(& g_ScriptHeader.iGlobalDataSize, 4, 1, pExecFile);
+    
+    char cIsMainPresent = 0;
+    if (g_ScriptHeader.iIsMainFuncPresent)
+        cIsMainPresent = 1;
+    fwrite(& cIsMainPresent, 1, 1, pExecFile);
+    fwrite(& g_ScriptHeader.iMainFuncIndex, 4, 1, pExecFile);
+    
+    fwrite(& g_iInstrStreamSize, 4, 1, pExecFile);
+    
+    for (int iCurrInstrIndex = 0; iCurrInstrIndex < g_iInstrStreamSize; ++ iCurrInstrIndex)
+    {
+        short sOpcode = g_pInstrStream[iCurrInstrIndex].iOpcode;
+        fwrite(& sOpcode, 2, 1, pExecFile);
+        
+        char iOpCount = g_pInstrStream[iCurrInstrIndex].iOpCount;
+        fwrite(& iOpCount, 1, 1, pExecFile);
+        
+        for (int iCurrOpIndex = 0; iCurrOpIndex < iOpCount; ++ iCurrOpIndex) {
+            Op CurrOp = g_pInstrStream[iCurrInstrIndex].pOpList[iCurrOpIndex];
+            char cOpType = CurrOp.iType;
+            fwrite(&cOpType, 1, 1, pExecFile);
+            
+            switch (CurrOp.iType) {
+                    // Integer literal
+                    
+                case OP_TYPE_INT:
+                    fwrite ( & CurrOp.iIntLiteral, sizeof ( int ), 1, pExecFile );
+                    break;
+                    
+                    // Floating-point literal
+                    
+                case OP_TYPE_FLOAT:
+                    fwrite ( & CurrOp.fFloatLiteral, sizeof ( float ), 1, pExecFile );
+                    break;
+                    
+                    // String index
+                    
+                case OP_TYPE_STRING_INDEX:
+                    fwrite ( & CurrOp.iStringTableIndex, sizeof ( int ), 1, pExecFile );
+                    break;
+                    
+                    // Instruction index
+                    
+                case OP_TYPE_INSTR_INDEX:
+                    fwrite ( & CurrOp.iInstrIndex, sizeof ( int ), 1, pExecFile );
+                    break;
+                    
+                    // Absolute stack index
+                    
+                case OP_TYPE_ABS_STACK_INDEX:
+                    fwrite ( & CurrOp.iStackIndex, sizeof ( int ), 1, pExecFile );
+                    break;
+                    
+                    // Relative stack index
+                    
+                case OP_TYPE_REL_STACK_INDEX:
+                    fwrite ( & CurrOp.iStackIndex, sizeof ( int ), 1, pExecFile );
+                    fwrite ( & CurrOp.iOffsetIndex, sizeof ( int ), 1, pExecFile );
+                    break;
+                    
+                    // Function index
+                    
+                case OP_TYPE_FUNC_INDEX:
+                    fwrite ( & CurrOp.iFuncIndex, sizeof ( int ), 1, pExecFile );
+                    break;
+                    
+                    // Host API call index
+                    
+                case OP_TYPE_HOST_API_CALL_INDEX:
+                    fwrite ( & CurrOp.iHostAPICallIndex, sizeof ( int ), 1, pExecFile );
+                    break;
+                    
+                    // Register
+                    
+                case OP_TYPE_REG:
+                    fwrite ( & CurrOp.iReg, sizeof ( int ), 1, pExecFile );
+                    break;
+            }
+        }
+        
+        int iCurrNode;
+        LinkedListNode * pNode;
+        char cParamCount;
+        
+        
+        fwrite (& g_StringTable.iNodeCount, 4, 1, pExecFile);
+        pNode = g_StringTable.pHead;
+        
+        for (iCurrNode = 0; iCurrNode < g_StringTable.iNodeCount; ++ iCurrNode)
+        {
+            char * pstrCurrString = (char *) pNode->pData;
+            int iCurrStringLength = (int) strlen(pstrCurrString);
+            fwrite(& iCurrStringLength, 4, 1, pExecFile);
+            fwrite(pstrCurrString, strlen(pstrCurrString), 1, pExecFile);
+            
+            pNode = pNode->pNext;
+        }
+        
+        // ---- Write the function table
+        
+        // Write out the function count (4 bytes)
+        
+        fwrite ( & g_FuncTable.iNodeCount, 4, 1, pExecFile );
+        
+        // Set the pointer to the head of the list
+        
+        pNode = g_FuncTable.pHead;
+        
+        // Loop through each node in the list and write out its function info
+        
+        for ( iCurrNode = 0; iCurrNode < g_FuncTable.iNodeCount; ++ iCurrNode )
+        {
+            // Create a local copy of the function
+            
+            FuncNode * pFunc = ( FuncNode * ) pNode->pData;
+            
+            // Write the entry point (4 bytes)
+            
+            fwrite ( & pFunc->iEntryPoint, sizeof ( int ), 1, pExecFile );
+            
+            // Write the parameter count (1 byte)
+            
+            cParamCount = pFunc->iParamCount;
+            fwrite ( & cParamCount, 1, 1, pExecFile );
+            
+            // Write the local data size (4 bytes)
+            
+            fwrite ( & pFunc->iLocalDataSize, sizeof ( int ), 1, pExecFile );
+            
+            // Move to the next node
+            
+            pNode = pNode->pNext;
+        }
+        
+        // ---- Write the host API call table
+        
+        // Write out the call count (4 bytes)
+        
+        fwrite ( & g_HostAPICallTable.iNodeCount, 4, 1, pExecFile );
+        
+        // Set the pointer to the head of the list
+        
+        pNode = g_HostAPICallTable.pHead;
+        
+        // Loop through each node in the list and write out its string
+        
+        for ( iCurrNode = 0; iCurrNode < g_HostAPICallTable.iNodeCount; ++ iCurrNode )
+        {
+            // Copy the string pointer and calculate its length
+            
+            char * pstrCurrHostAPICall = ( char * ) pNode->pData;
+            char cCurrHostAPICallLength = strlen ( pstrCurrHostAPICall );
+            
+            // Write the length (1 byte), followed by the string data (N bytes)
+            
+            fwrite ( & cCurrHostAPICallLength, 1, 1, pExecFile );
+            fwrite ( pstrCurrHostAPICall, strlen ( pstrCurrHostAPICall ), 1, pExecFile );
+            
+            // Move to the next node
+            
+            pNode = pNode->pNext;
+        }
+        
+        // ---- Close the output file
+        
+        fclose ( pExecFile );
+    }
 }
 
 // ---- Main -----
