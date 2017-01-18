@@ -26,7 +26,7 @@ void AssmblSourceFile ()
     g_ScriptHeader.iGlobalDataSize = 0;
     
     int iIsFuncActive = false;
-    FuncNode * pCurrFunc;
+    FuncNode * pCurrFunc = NULL;
     int iCurrFuncIndex = 0;
     char pstrCurrFuncName[MAX_IDENT_SIZE];
     int iCurrFuncParamCount = 0;
@@ -57,6 +57,55 @@ void AssmblSourceFile ()
                 g_ScriptHeader.iStackSize = atoi (GetCurrLexeme ());
                 
                 g_iIsSetStackSizeFound = true;
+                
+                break;
+            }
+                
+            case TOKEN_TYPE_VAR:
+            {
+                if (GetNextToken () != TOKEN_TYPE_IDENT)
+                    ExitOnCodeError (ERROR_MSSG_IDENT_EXPECTED);
+                char pstrIdent[MAX_IDENT_SIZE];
+                strcpy (pstrIdent, GetCurrLexeme ());
+                
+                int iSize = 1;
+                
+                if (GetLookAheadChar () == '[')
+                {
+                    if (GetNextToken () != TOKEN_TYPE_OPEN_BRACKET)
+                        ExitOnCharExpectedError('[');
+                    
+                    if (GetNextToken () != TOKEN_TYPE_INT)
+                        ExitOnCodeError (ERROR_MSSG_INVALID_ARRAY_SIZE);
+                    iSize = atoi (GetCurrLexeme ());
+                    
+                    if (iSize <= 0)
+                        ExitOnCodeError (ERROR_MSSG_INVALID_ARRAY_SIZE);
+                    if (GetNextToken () != TOKEN_TYPE_CLOSE_BRACKET)
+                        ExitOnCharExpectedError (']');
+                }
+                
+                int iStackIndex;
+                if (iIsFuncActive)
+                {
+                    iStackIndex = -(iCurrFuncLocalDataSize + 2);
+                }
+                else
+                {
+                    iStackIndex = g_ScriptHeader.iGlobalDataSize;
+                }
+                
+                if (AddSymbol (pstrIdent, iSize, iStackIndex, iCurrFuncIndex) == -1)
+                    ExitOnCodeError (ERROR_MSSG_IDENT_REDEFINITION);
+                
+                if (iIsFuncActive)
+                {
+                    iCurrFuncLocalDataSize += iSize;
+                }
+                else
+                {
+                    g_ScriptHeader.iGlobalDataSize += iSize;
+                }
                 
                 break;
             }
@@ -110,52 +159,26 @@ void AssmblSourceFile ()
                 break;
             }
                 
-            case TOKEN_TYPE_VAR:
+            case TOKEN_TYPE_PARAM:
             {
-                if (GetNextToken () != TOKEN_TYPE_IDENT)
-                    ExitOnCodeError (ERROR_MSSG_IDENT_EXPECTED);
-                char pstrIdent[MAX_IDENT_SIZE];
-                strcpy (pstrIdent, GetCurrLexeme ());
+                if (!iIsFuncActive)
+                    ExitOnCodeError(ERROR_MSSG_GLOBAL_PARAM);
                 
-                int iSize = 1;
+                if (strcmp(pstrCurrFuncName, MAIN_FUNC_NAME) == 0)
+                    ExitOnCodeError(ERROR_MSSG_MAIN_PARAM);
                 
-                if (GetLookAheadChar () == '[')
-                {
-                    if (GetNextToken () != TOKEN_TYPE_OPEN_BRACKET)
-                        ExitOnCharExpectedError('[');
-                    
-                    if (GetNextToken () != TOKEN_TYPE_INT)
-                        ExitOnCodeError (ERROR_MSSG_INVALID_ARRAY_SIZE);
-                    iSize = atoi (GetCurrLexeme ());
-                    
-                    if (iSize <= 0)
-                        ExitOnCodeError (ERROR_MSSG_INVALID_ARRAY_SIZE);
-                    if (GetNextToken () != TOKEN_TYPE_CLOSE_BRACKET)
-                        ExitOnCharExpectedError (']');
-                }
+                if (GetNextToken() != TOKEN_TYPE_IDENT)
+                    ExitOnCodeError(ERROR_MSSG_IDENT_EXPECTED);
+                ++ iCurrFuncParamCount;
+                break;
+            }
                 
-                int iStackIndex;
-                if (iIsFuncActive)
-                {
-                    iStackIndex = -(iCurrFuncLocalDataSize + 2);
-                }
-                else
-                {
-                    iStackIndex = g_ScriptHeader.iGlobalDataSize;
-                }
+            case TOKEN_TYPE_INSTR:
+            {
+                if (!iIsFuncActive)
+                    ExitOnCodeError(ERROR_MSSG_GLOBAL_INSTR);
                 
-                if (AddSymbol (pstrIdent, iSize, iStackIndex, iCurrFuncIndex) == -1)
-                    ExitOnCodeError (ERROR_MSSG_IDENT_REDEFINITION);
-                
-                if (iIsFuncActive)
-                {
-                    iCurrFuncLocalDataSize += iSize;
-                }
-                else
-                {
-                    g_ScriptHeader.iGlobalDataSize += iSize;
-                }
-                
+                ++ g_iInstrStreamSize;
                 break;
             }
                 
@@ -180,389 +203,444 @@ void AssmblSourceFile ()
                 
             }
                 
+            default:
+                if (g_Lexer.CurrToken != TOKEN_TYPE_NEWLINE)
+                    ExitOnCodeError(ERROR_MSSG_INVALID_INPUT);
         }
         
-        while (true)
-        {
-            if (GetNextToken() == END_OF_TOKEN_STREAM)
+    }
+    
+    g_pInstrStream = (Instr * ) malloc(g_iInstrStreamSize * sizeof(Instr));
+    
+    for (int iCurrInstrIndex = 0; iCurrInstrIndex < g_iInstrStreamSize; ++ iCurrInstrIndex)
+        g_pInstrStream[iCurrInstrIndex].pOpList = NULL;
+    
+    g_iCurrInstrIndex = 0;
+    
+    ResetLexer();
+    
+    while (true)
+    {
+        if (GetNextToken() == END_OF_TOKEN_STREAM)
+            break;
+        
+        switch (g_Lexer.CurrToken) {
+            case TOKEN_TYPE_FUNC:
+            {
+                GetNextToken();
+                
+                pCurrFunc = GetFuncByName(GetCurrLexeme());
+                
+                iIsFuncActive = true;
+                
+                iCurrFuncParamCount = 0;
+                
+                iCurrFuncIndex = pCurrFunc->iIndex;
+                
+                while (GetNextToken() == TOKEN_TYPE_NEWLINE);
+                
                 break;
-            
-            switch (g_Lexer.CurrToken) {
-                case TOKEN_TYPE_PARAM:
+            }
+                
+            case TOKEN_TYPE_CLOSE_BRACE:
+            {
+                iIsFuncActive = false;
+                if (strcmp(pCurrFunc->pstrName, MAIN_FUNC_NAME) == 0)
                 {
-                    if (GetNextToken() != TOKEN_TYPE_IDENT)
-                        ExitOnCodeError(ERROR_MSSG_IDENT_EXPECTED);
+                    g_pInstrStream[g_iCurrInstrIndex].iOpcode = INSTR_EXIT;
+                    g_pInstrStream[g_iCurrInstrIndex].iOpCount = 1;
                     
-                    char * pstrIdent = GetCurrLexeme();
-                    
-                    int iStackIndex = - (pCurrFunc->iLocalDataSize + 2 + (iCurrFuncParamCount + 1));
-                    
-                    if (AddSymbol(pstrIdent, 1, iStackIndex, iCurrFuncIndex) == -1)
-                        ExitOnCodeError(ERROR_MSSG_IDENT_REDEFINITION);
-                    
-                    ++ iCurrFuncParamCount;
-                    
-                    break;
+                    g_pInstrStream[g_iCurrInstrIndex].pOpList = (Op *) malloc(sizeof(Op));
+                    g_pInstrStream[g_iCurrInstrIndex].pOpList[0].iType = OP_TYPE_INT;
+                    g_pInstrStream[g_iCurrInstrIndex].pOpList[0].iIntLiteral = 0;
                 }
-                    
-                case TOKEN_TYPE_INSTR:
+                else
                 {
-                    GetInstrByMnemonic(GetCurrLexeme(), & CurrInstr);
-                    g_pInstrStream[g_iCurrInstrIndex].iOpcode = CurrInstr.iOpcode;
-                    g_pInstrStream[g_iCurrInstrIndex].iOpCount = CurrInstr.iOpCount;
-                    Op * pOpList = (Op *) malloc(CurrInstr.iOpCount * sizeof(Op));
+                    g_pInstrStream[g_iCurrInstrIndex].iOpcode = INSTR_RET;
+                    g_pInstrStream[g_iCurrInstrIndex].iOpCount = 0;
+                    g_pInstrStream[g_iCurrInstrIndex].pOpList = NULL;
+                }
+                
+                ++ g_iCurrInstrIndex;
+                
+                break;
+            }
+            
+            case TOKEN_TYPE_PARAM:
+            {
+                if (GetNextToken() != TOKEN_TYPE_IDENT)
+                    ExitOnCodeError(ERROR_MSSG_IDENT_EXPECTED);
+                
+                char * pstrIdent = GetCurrLexeme();
+                
+                int iStackIndex = - (pCurrFunc->iLocalDataSize + 2 + (iCurrFuncParamCount + 1));
+                
+                if (AddSymbol(pstrIdent, 1, iStackIndex, iCurrFuncIndex) == -1)
+                    ExitOnCodeError(ERROR_MSSG_IDENT_REDEFINITION);
+                
+                ++ iCurrFuncParamCount;
+                
+                break;
+            }
+                
+            case TOKEN_TYPE_INSTR:
+            {
+                GetInstrByMnemonic(GetCurrLexeme(), & CurrInstr);
+                g_pInstrStream[g_iCurrInstrIndex].iOpcode = CurrInstr.iOpcode;
+                g_pInstrStream[g_iCurrInstrIndex].iOpCount = CurrInstr.iOpCount;
+                Op * pOpList = (Op *) malloc(CurrInstr.iOpCount * sizeof(Op));
+                
+                for (int iCurrOpIndex = 0; iCurrOpIndex < CurrInstr.iOpCount; ++ iCurrOpIndex)
+                {
+                    OpTypes CurrOpTypes = CurrInstr.OpList[iCurrOpIndex];
+                    Token InitOpToken = GetNextToken();
                     
-                    for (int iCurrOpIndex = 0; iCurrOpIndex < CurrInstr.iOpCount; ++ iCurrOpIndex)
-                    {
-                        OpTypes CurrOpTypes = CurrInstr.OpList[iCurrOpIndex];
-                        Token InitOpToken = GetNextToken();
-                        
-                        switch (InitOpToken) {
-                                
-                            case TOKEN_TYPE_INT:
+                    switch (InitOpToken) {
+                            
+                        case TOKEN_TYPE_INT:
+                        {
+                            if (CurrOpTypes & OP_FLAG_TYPE_INT)
                             {
-                                if (CurrOpTypes & OP_FLAG_TYPE_INT)
-                                {
-                                    pOpList[iCurrOpIndex].iType = OP_TYPE_INT;
-                                    pOpList[iCurrOpIndex].iIntLiteral = atoi(GetCurrLexeme());
-                                }
-                                else
-                                    ExitOnCodeError(ERROR_MSSG_INVALID_OP);
-                                break;
+                                pOpList[iCurrOpIndex].iType = OP_TYPE_INT;
+                                pOpList[iCurrOpIndex].iIntLiteral = atoi(GetCurrLexeme());
                             }
-                                
-                                // A floating-point literal
-                                
-                            case TOKEN_TYPE_FLOAT:
+                            else
+                                ExitOnCodeError(ERROR_MSSG_INVALID_OP);
+                            break;
+                        }
+                            
+                            // A floating-point literal
+                            
+                        case TOKEN_TYPE_FLOAT:
+                        {
+                            // Make sure the operand type is valid
+                            
+                            if ( CurrOpTypes & OP_FLAG_TYPE_FLOAT )
                             {
-                                // Make sure the operand type is valid
+                                // Set a floating-point operand type
                                 
-                                if ( CurrOpTypes & OP_FLAG_TYPE_FLOAT )
-                                {
-                                    // Set a floating-point operand type
-                                    
-                                    pOpList [ iCurrOpIndex ].iType = OP_TYPE_FLOAT;
-                                    
-                                    // Copy the value into the operand list from the current
-                                    // lexeme
-                                    
-                                    pOpList [ iCurrOpIndex ].fFloatLiteral = ( float ) atof ( GetCurrLexeme () );
-                                }
-                                else
-                                    ExitOnCodeError ( ERROR_MSSG_INVALID_OP );
+                                pOpList [ iCurrOpIndex ].iType = OP_TYPE_FLOAT;
                                 
-                                break;
+                                // Copy the value into the operand list from the current
+                                // lexeme
                                 
-                                // A string literal (since strings always start with quotes)
+                                pOpList [ iCurrOpIndex ].fFloatLiteral = ( float ) atof ( GetCurrLexeme () );
                             }
-                                
-                            case TOKEN_TYPE_QUOTE:
+                            else
+                                ExitOnCodeError ( ERROR_MSSG_INVALID_OP );
+                            
+                            break;
+                            
+                            // A string literal (since strings always start with quotes)
+                        }
+                            
+                        case TOKEN_TYPE_QUOTE:
+                        {
+                            // Make sure the operand type is valid
+                            
+                            if ( CurrOpTypes & OP_FLAG_TYPE_STRING )
                             {
-                                // Make sure the operand type is valid
+                                GetNextToken ();
                                 
-                                if ( CurrOpTypes & OP_FLAG_TYPE_STRING )
+                                // Handle the string based on its type
+                                
+                                switch ( g_Lexer.CurrToken )
                                 {
-                                    GetNextToken ();
-                                    
-                                    // Handle the string based on its type
-                                    
-                                    switch ( g_Lexer.CurrToken )
+                                        // If we read another quote, the string is empty
+                                        
+                                    case TOKEN_TYPE_QUOTE:
                                     {
-                                            // If we read another quote, the string is empty
-                                            
-                                        case TOKEN_TYPE_QUOTE:
-                                        {
-                                            // Convert empty strings to the integer value zero
-                                            
-                                            pOpList [ iCurrOpIndex ].iType = OP_TYPE_INT;
-                                            pOpList [ iCurrOpIndex ].iIntLiteral = 0;
-                                            break;
-                                        }
-                                            
-                                            // It's a normal string
-                                            
-                                        case TOKEN_TYPE_STRING:
-                                        {
-                                            // Get the string literal
-                                            
-                                            char * pstrString = GetCurrLexeme ();
-                                            
-                                            // Add the string to the table, or get the index of
-                                            // the existing copy
-                                            
-                                            int iStringIndex = AddString ( & g_StringTable, pstrString );
-                                            
-                                            // Make sure the closing double-quote is present
-                                            
-                                            if ( GetNextToken () != TOKEN_TYPE_QUOTE )
-                                                ExitOnCharExpectedError ( '\\' );
-                                            
-                                            // Set the operand type to string index and set its
-                                            // data field
-                                            
-                                            pOpList [ iCurrOpIndex ].iType = OP_TYPE_STRING_INDEX;
-                                            pOpList [ iCurrOpIndex ].iStringTableIndex = iStringIndex;
-                                            break;
-                                        }
-                                            
-                                            // The string is invalid
-                                            
-                                        default:
-                                            ExitOnCodeError ( ERROR_MSSG_INVALID_STRING );
+                                        // Convert empty strings to the integer value zero
+                                        
+                                        pOpList [ iCurrOpIndex ].iType = OP_TYPE_INT;
+                                        pOpList [ iCurrOpIndex ].iIntLiteral = 0;
+                                        break;
                                     }
-                                }
-                                else
-                                    ExitOnCodeError ( ERROR_MSSG_INVALID_OP );
-                                
-                                break;
-                            }
-                                
-                                // _RetVal
-                                
-                            case TOKEN_TYPE_REG_RETVAL:
-                            {
-                                // Make sure the operand type is valid
-                                
-                                if ( CurrOpTypes & OP_FLAG_TYPE_REG )
-                                {
-                                    // Set a register type
-                                    
-                                    pOpList [ iCurrOpIndex ].iType = OP_TYPE_REG;
-                                    pOpList [ iCurrOpIndex ].iReg = 0;
-                                }
-                                else
-                                    ExitOnCodeError ( ERROR_MSSG_INVALID_OP );
-                                
-                                break;
-                                
-                                // Identifiers
-                                
-                                // These operands can be any of the following
-                                //      - Variables/Array Indices
-                                //      - Line Labels
-                                //      - Function Names
-                                //      - Host API Calls
-                            }
-                                
-                            case TOKEN_TYPE_IDENT:
-                            {
-                                // Find out which type of identifier is expected. Since no
-                                // instruction in XVM assebly accepts more than one type
-                                // of identifier per operand, we can use the operand types
-                                // alone to determine which type of identifier we're
-                                // parsing.
-                                
-                                // Parse a memory reference-- a variable or array index
-                                
-                                if ( CurrOpTypes & OP_FLAG_TYPE_MEM_REF )
-                                {
-                                    // Whether the memory reference is a variable or array
-                                    // index, the current lexeme is the identifier so save a
-                                    // copy of it for later
-                                    
-                                    char pstrIdent [ MAX_IDENT_SIZE ];
-                                    strcpy ( pstrIdent, GetCurrLexeme () );
-                                    
-                                    // Make sure the variable/array has been defined
-                                    
-                                    if ( ! GetSymbolByIdent ( pstrIdent, iCurrFuncIndex ) )
-                                        ExitOnCodeError ( ERROR_MSSG_UNDEFINED_IDENT );
-                                    
-                                    // Get the identifier's index as well; it may either be
-                                    // an absolute index or a base index
-                                    
-                                    int iBaseIndex = GetStackIndexByIdent ( pstrIdent, iCurrFuncIndex );
-                                    
-                                    // Use the lookahead character to find out whether or not
-                                    // we're parsing an array
-                                    
-                                    if ( GetLookAheadChar () != '[' )
+                                        
+                                        // It's a normal string
+                                        
+                                    case TOKEN_TYPE_STRING:
                                     {
-                                        // It's just a single identifier so the base index we
-                                        // already saved is the variable's stack index
+                                        // Get the string literal
                                         
-                                        // Make sure the variable isn't an array
+                                        char * pstrString = GetCurrLexeme ();
                                         
-                                        if ( GetSizeByIdent ( pstrIdent, iCurrFuncIndex ) > 1 )
-                                            ExitOnCodeError ( ERROR_MSSG_INVALID_ARRAY_NOT_INDEXED );
+                                        // Add the string to the table, or get the index of
+                                        // the existing copy
                                         
-                                        // Set the operand type to stack index and set the data
-                                        // field
+                                        int iStringIndex = AddString ( & g_StringTable, pstrString );
+                                        
+                                        // Make sure the closing double-quote is present
+                                        
+                                        if ( GetNextToken () != TOKEN_TYPE_QUOTE )
+                                            ExitOnCharExpectedError ( '\\' );
+                                        
+                                        // Set the operand type to string index and set its
+                                        // data field
+                                        
+                                        pOpList [ iCurrOpIndex ].iType = OP_TYPE_STRING_INDEX;
+                                        pOpList [ iCurrOpIndex ].iStringTableIndex = iStringIndex;
+                                        break;
+                                    }
+                                        
+                                        // The string is invalid
+                                        
+                                    default:
+                                        ExitOnCodeError ( ERROR_MSSG_INVALID_STRING );
+                                }
+                            }
+                            else
+                                ExitOnCodeError ( ERROR_MSSG_INVALID_OP );
+                            
+                            break;
+                        }
+                            
+                            // _RetVal
+                            
+                        case TOKEN_TYPE_REG_RETVAL:
+                        {
+                            // Make sure the operand type is valid
+                            
+                            if ( CurrOpTypes & OP_FLAG_TYPE_REG )
+                            {
+                                // Set a register type
+                                
+                                pOpList [ iCurrOpIndex ].iType = OP_TYPE_REG;
+                                pOpList [ iCurrOpIndex ].iReg = 0;
+                            }
+                            else
+                                ExitOnCodeError ( ERROR_MSSG_INVALID_OP );
+                            
+                            break;
+                            
+                            // Identifiers
+                            
+                            // These operands can be any of the following
+                            //      - Variables/Array Indices
+                            //      - Line Labels
+                            //      - Function Names
+                            //      - Host API Calls
+                        }
+                            
+                        case TOKEN_TYPE_IDENT:
+                        {
+                            // Find out which type of identifier is expected. Since no
+                            // instruction in XVM assebly accepts more than one type
+                            // of identifier per operand, we can use the operand types
+                            // alone to determine which type of identifier we're
+                            // parsing.
+                            
+                            // Parse a memory reference-- a variable or array index
+                            
+                            if ( CurrOpTypes & OP_FLAG_TYPE_MEM_REF )
+                            {
+                                // Whether the memory reference is a variable or array
+                                // index, the current lexeme is the identifier so save a
+                                // copy of it for later
+                                
+                                char pstrIdent [ MAX_IDENT_SIZE ];
+                                strcpy ( pstrIdent, GetCurrLexeme () );
+                                
+                                // Make sure the variable/array has been defined
+                                
+                                if ( ! GetSymbolByIdent ( pstrIdent, iCurrFuncIndex ) )
+                                    ExitOnCodeError ( ERROR_MSSG_UNDEFINED_IDENT );
+                                
+                                // Get the identifier's index as well; it may either be
+                                // an absolute index or a base index
+                                
+                                int iBaseIndex = GetStackIndexByIdent ( pstrIdent, iCurrFuncIndex );
+                                
+                                // Use the lookahead character to find out whether or not
+                                // we're parsing an array
+                                
+                                if ( GetLookAheadChar () != '[' )
+                                {
+                                    // It's just a single identifier so the base index we
+                                    // already saved is the variable's stack index
+                                    
+                                    // Make sure the variable isn't an array
+                                    
+                                    if ( GetSizeByIdent ( pstrIdent, iCurrFuncIndex ) > 1 )
+                                        ExitOnCodeError ( ERROR_MSSG_INVALID_ARRAY_NOT_INDEXED );
+                                    
+                                    // Set the operand type to stack index and set the data
+                                    // field
+                                    
+                                    pOpList [ iCurrOpIndex ].iType = OP_TYPE_ABS_STACK_INDEX;
+                                    pOpList [ iCurrOpIndex ].iIntLiteral = iBaseIndex;
+                                }
+                                else
+                                {
+                                    // It's an array, so lets verify that the identifier is
+                                    // an actual array
+                                    
+                                    if ( GetSizeByIdent ( pstrIdent, iCurrFuncIndex ) == 1 )
+                                        ExitOnCodeError ( ERROR_MSSG_INVALID_ARRAY );
+                                    
+                                    // First make sure the open brace is valid
+                                    
+                                    if ( GetNextToken () != TOKEN_TYPE_OPEN_BRACKET )
+                                        ExitOnCharExpectedError ( '[' );
+                                    
+                                    // The next token is the index, be it an integer literal
+                                    // or variable identifier
+                                    
+                                    Token IndexToken = GetNextToken ();
+                                    
+                                    if ( IndexToken == TOKEN_TYPE_INT )
+                                    {
+                                        // It's an integer, so determine its value by
+                                        // converting the current lexeme to an integer
+                                        
+                                        int iOffsetIndex = atoi ( GetCurrLexeme () );
+                                        
+                                        // Add the index to the base index to find the offset
+                                        // index and set the operand type to absolute stack
+                                        // index
                                         
                                         pOpList [ iCurrOpIndex ].iType = OP_TYPE_ABS_STACK_INDEX;
-                                        pOpList [ iCurrOpIndex ].iIntLiteral = iBaseIndex;
+                                        pOpList [ iCurrOpIndex ].iStackIndex = iBaseIndex + iOffsetIndex;
+                                    }
+                                    else if ( IndexToken == TOKEN_TYPE_IDENT )
+                                    {
+                                        // It's an identifier, so save the current lexeme
+                                        
+                                        char * pstrIndexIdent = GetCurrLexeme ();
+                                        
+                                        // Make sure the index is a valid array index, in
+                                        // that the identifier represents a single variable
+                                        // as opposed to another array
+                                        
+                                        if ( ! GetSymbolByIdent ( pstrIndexIdent, iCurrFuncIndex ) )
+                                            ExitOnCodeError ( ERROR_MSSG_UNDEFINED_IDENT );
+                                        
+                                        if ( GetSizeByIdent ( pstrIndexIdent, iCurrFuncIndex ) > 1 )
+                                            ExitOnCodeError ( ERROR_MSSG_INVALID_ARRAY_INDEX );
+                                        
+                                        // Get the variable's stack index and set the operand
+                                        // type to relative stack index
+                                        
+                                        int iOffsetIndex = GetStackIndexByIdent ( pstrIndexIdent, iCurrFuncIndex );
+                                        
+                                        pOpList [ iCurrOpIndex ].iType = OP_TYPE_REL_STACK_INDEX;
+                                        pOpList [ iCurrOpIndex ].iStackIndex = iBaseIndex;
+                                        pOpList [ iCurrOpIndex ].iOffsetIndex = iOffsetIndex;
                                     }
                                     else
                                     {
-                                        // It's an array, so lets verify that the identifier is
-                                        // an actual array
+                                        // Whatever it is, it's invalid
                                         
-                                        if ( GetSizeByIdent ( pstrIdent, iCurrFuncIndex ) == 1 )
-                                            ExitOnCodeError ( ERROR_MSSG_INVALID_ARRAY );
-                                        
-                                        // First make sure the open brace is valid
-                                        
-                                        if ( GetNextToken () != TOKEN_TYPE_OPEN_BRACKET )
-                                            ExitOnCharExpectedError ( '[' );
-                                        
-                                        // The next token is the index, be it an integer literal
-                                        // or variable identifier
-                                        
-                                        Token IndexToken = GetNextToken ();
-                                        
-                                        if ( IndexToken == TOKEN_TYPE_INT )
-                                        {
-                                            // It's an integer, so determine its value by
-                                            // converting the current lexeme to an integer
-                                            
-                                            int iOffsetIndex = atoi ( GetCurrLexeme () );
-                                            
-                                            // Add the index to the base index to find the offset
-                                            // index and set the operand type to absolute stack
-                                            // index
-                                            
-                                            pOpList [ iCurrOpIndex ].iType = OP_TYPE_ABS_STACK_INDEX;
-                                            pOpList [ iCurrOpIndex ].iStackIndex = iBaseIndex + iOffsetIndex;
-                                        }
-                                        else if ( IndexToken == TOKEN_TYPE_IDENT )
-                                        {
-                                            // It's an identifier, so save the current lexeme
-                                            
-                                            char * pstrIndexIdent = GetCurrLexeme ();
-                                            
-                                            // Make sure the index is a valid array index, in
-                                            // that the identifier represents a single variable
-                                            // as opposed to another array
-                                            
-                                            if ( ! GetSymbolByIdent ( pstrIndexIdent, iCurrFuncIndex ) )
-                                                ExitOnCodeError ( ERROR_MSSG_UNDEFINED_IDENT );
-                                            
-                                            if ( GetSizeByIdent ( pstrIndexIdent, iCurrFuncIndex ) > 1 )
-                                                ExitOnCodeError ( ERROR_MSSG_INVALID_ARRAY_INDEX );
-                                            
-                                            // Get the variable's stack index and set the operand
-                                            // type to relative stack index
-                                            
-                                            int iOffsetIndex = GetStackIndexByIdent ( pstrIndexIdent, iCurrFuncIndex );
-                                            
-                                            pOpList [ iCurrOpIndex ].iType = OP_TYPE_REL_STACK_INDEX;
-                                            pOpList [ iCurrOpIndex ].iStackIndex = iBaseIndex;
-                                            pOpList [ iCurrOpIndex ].iOffsetIndex = iOffsetIndex;
-                                        }
-                                        else
-                                        {
-                                            // Whatever it is, it's invalid
-                                            
-                                            ExitOnCodeError ( ERROR_MSSG_INVALID_ARRAY_INDEX );
-                                        }
-                                        
-                                        // Lastly, make sure the closing brace is present as well
-                                        
-                                        if ( GetNextToken () != TOKEN_TYPE_CLOSE_BRACKET )
-                                            ExitOnCharExpectedError ( '[' );
+                                        ExitOnCodeError ( ERROR_MSSG_INVALID_ARRAY_INDEX );
                                     }
+                                    
+                                    // Lastly, make sure the closing brace is present as well
+                                    
+                                    if ( GetNextToken () != TOKEN_TYPE_CLOSE_BRACKET )
+                                        ExitOnCharExpectedError ( '[' );
                                 }
-                                
-                                // Parse a line label
-                                
-                                if ( CurrOpTypes & OP_FLAG_TYPE_LINE_LABEL )
-                                {
-                                    // Get the current lexeme, which is the line label
-                                    
-                                    char * pstrLabelIdent = GetCurrLexeme ();
-                                    
-                                    // Use the label identifier to get the label's information
-                                    
-                                    LabelNode * pLabel = GetLabelByIdent ( pstrLabelIdent, iCurrFuncIndex );
-                                    
-                                    // Make sure the label exists
-                                    
-                                    if ( ! pLabel )
-                                        ExitOnCodeError ( ERROR_MSSG_UNDEFINED_LINE_LABEL );
-                                    
-                                    // Set the operand type to instruction index and set the
-                                    // data field
-                                    
-                                    pOpList [ iCurrOpIndex ].iType = OP_TYPE_INSTR_INDEX;
-                                    pOpList [ iCurrOpIndex ].iInstrIndex = pLabel->iTargetIndex;
-                                }
-                                
-                                // Parse a function name
-                                
-                                if ( CurrOpTypes & OP_FLAG_TYPE_FUNC_NAME )
-                                {
-                                    // Get the current lexeme, which is the function name
-                                    
-                                    char * pstrFuncName = GetCurrLexeme ();
-                                    
-                                    // Use the function name to get the function's information
-                                    
-                                    FuncNode * pFunc = GetFuncByName ( pstrFuncName );
-                                    
-                                    // Make sure the function exists
-                                    
-                                    if ( ! pFunc )
-                                        ExitOnCodeError ( ERROR_MSSG_UNDEFINED_FUNC );
-                                    
-                                    // Set the operand type to function index and set its data
-                                    // field
-                                    
-                                    pOpList [ iCurrOpIndex ].iType = OP_TYPE_FUNC_INDEX;
-                                    pOpList [ iCurrOpIndex ].iFuncIndex = pFunc->iIndex;
-                                }
-                                
-                                // Parse a host API call
-                                
-                                if ( CurrOpTypes & OP_FLAG_TYPE_HOST_API_CALL )
-                                {
-                                    // Get the current lexeme, which is the host API call
-                                    
-                                    char * pstrHostAPICall = GetCurrLexeme ();
-                                    
-                                    // Add the call to the table, or get the index of the
-                                    // existing copy
-                                    
-                                    int iIndex = AddString ( & g_HostAPICallTable, pstrHostAPICall );
-                                    
-                                    // Set the operand type to host API call index and set its
-                                    // data field
-                                    
-                                    pOpList [ iCurrOpIndex ].iType = OP_TYPE_HOST_API_CALL_INDEX;
-                                    pOpList [ iCurrOpIndex ].iHostAPICallIndex = iIndex;
-                                }
-                                
-                                break;
                             }
+                            
+                            // Parse a line label
+                            
+                            if ( CurrOpTypes & OP_FLAG_TYPE_LINE_LABEL )
+                            {
+                                // Get the current lexeme, which is the line label
                                 
-                                // Anything else
+                                char * pstrLabelIdent = GetCurrLexeme ();
                                 
-                            default:
+                                // Use the label identifier to get the label's information
                                 
-                                ExitOnCodeError ( ERROR_MSSG_INVALID_OP );
-                                break;
+                                LabelNode * pLabel = GetLabelByIdent ( pstrLabelIdent, iCurrFuncIndex );
+                                
+                                // Make sure the label exists
+                                
+                                if ( ! pLabel )
+                                    ExitOnCodeError ( ERROR_MSSG_UNDEFINED_LINE_LABEL );
+                                
+                                // Set the operand type to instruction index and set the
+                                // data field
+                                
+                                pOpList [ iCurrOpIndex ].iType = OP_TYPE_INSTR_INDEX;
+                                pOpList [ iCurrOpIndex ].iInstrIndex = pLabel->iTargetIndex;
+                            }
+                            
+                            // Parse a function name
+                            
+                            if ( CurrOpTypes & OP_FLAG_TYPE_FUNC_NAME )
+                            {
+                                // Get the current lexeme, which is the function name
+                                
+                                char * pstrFuncName = GetCurrLexeme ();
+                                
+                                // Use the function name to get the function's information
+                                
+                                FuncNode * pFunc = GetFuncByName ( pstrFuncName );
+                                
+                                // Make sure the function exists
+                                
+                                if ( ! pFunc )
+                                    ExitOnCodeError ( ERROR_MSSG_UNDEFINED_FUNC );
+                                
+                                // Set the operand type to function index and set its data
+                                // field
+                                
+                                pOpList [ iCurrOpIndex ].iType = OP_TYPE_FUNC_INDEX;
+                                pOpList [ iCurrOpIndex ].iFuncIndex = pFunc->iIndex;
+                            }
+                            
+                            // Parse a host API call
+                            
+                            if ( CurrOpTypes & OP_FLAG_TYPE_HOST_API_CALL )
+                            {
+                                // Get the current lexeme, which is the host API call
+                                
+                                char * pstrHostAPICall = GetCurrLexeme ();
+                                
+                                // Add the call to the table, or get the index of the
+                                // existing copy
+                                
+                                int iIndex = AddString ( & g_HostAPICallTable, pstrHostAPICall );
+                                
+                                // Set the operand type to host API call index and set its
+                                // data field
+                                
+                                pOpList [ iCurrOpIndex ].iType = OP_TYPE_HOST_API_CALL_INDEX;
+                                pOpList [ iCurrOpIndex ].iHostAPICallIndex = iIndex;
+                            }
+                            
+                            break;
                         }
-                        
-                        // Make sure a comma follows the operand, unless it's the last one
-                        
-                        
-                        if (iCurrOpIndex < CurrInstr.iOpCount - 1)
-                        {
-                            if (GetNextToken() != TOKEN_TYPE_COMMA)
-                                ExitOnCharExpectedError(',');
-                        }
+                            
+                            // Anything else
+                            
+                        default:
+                            
+                            ExitOnCodeError ( ERROR_MSSG_INVALID_OP );
+                            break;
                     }
                     
-                    if (GetNextToken() != TOKEN_TYPE_NEWLINE)
-                        ExitOnCodeError(ERROR_MSSG_INVALID_INPUT);
+                    // Make sure a comma follows the operand, unless it's the last one
                     
-                    g_pInstrStream[g_iCurrInstrIndex].pOpList = pOpList;
                     
-                    ++ g_iCurrInstrIndex;
-                    
+                    if (iCurrOpIndex < CurrInstr.iOpCount - 1)
+                    {
+                        if (GetNextToken() != TOKEN_TYPE_COMMA)
+                            ExitOnCharExpectedError(',');
+                    }
                 }
+                
+                if (GetNextToken() != TOKEN_TYPE_NEWLINE)
+                    ExitOnCodeError(ERROR_MSSG_INVALID_INPUT);
+                
+                g_pInstrStream[g_iCurrInstrIndex].pOpList = pOpList;
+                
+                ++ g_iCurrInstrIndex;
+                
             }
         }
     }
+    
 }
 
 void strupr (char * pstrString)
@@ -747,14 +825,14 @@ SymbolNode * GetSymbolByIdent ( char * pstrIdent, int iFuncIndex )
     return NULL;
 }
 
-int GetStackIndexByIndent ( char * pstrIdent, int iFuncIndex )
+int GetStackIndexByIdent ( char * pstrIdent, int iFuncIndex )
 {
     SymbolNode * pSymbol = GetSymbolByIdent ( pstrIdent, iFuncIndex );
     
     return pSymbol->iStackIndex;
 }
 
-int GetSizeByIndent ( char * pstrIdent, int iFuncIndex )
+int GetSizeByIdent ( char * pstrIdent, int iFuncIndex )
 {
     SymbolNode * pSymbol = GetSymbolByIdent ( pstrIdent, iFuncIndex );
     
@@ -820,7 +898,7 @@ LabelNode * GetLabelByIndex ( char * pstrIdent, int iFuncIndex )
     return NULL;
 }
 
-int AddInstrLookup ( char * pstrMnemonic, int iOpcode, int iOpCount )
+int AddInstrLookup ( const char * pstrMnemonic, int iOpcode, int iOpCount )
 {
     static int iInstrIndex = 0;
     
@@ -1341,7 +1419,7 @@ void Exit ()
     exit (0);
 }
 
-void ExitOnError (char * pstrErrorMssg)
+void ExitOnError (const char * pstrErrorMssg)
 {
     printf ("Fatal Error: %s.\n", pstrErrorMssg);
     
@@ -1380,6 +1458,71 @@ void ExitOnCharExpectedError (char cChar)
     sprintf (pstrErrorMssg, "'%c' expected", cChar);
     
     ExitOnCodeError(pstrErrorMssg);
+}
+
+void LoadSourceFile ()
+{
+    // Open the source file in binary mode
+    
+    if ( ! ( g_pSourceFile = fopen ( g_pstrSourceFilename, "rb" ) ) )
+        ExitOnError ( "Could not open source file" );
+    
+    // Count the number of source lines
+    
+    while ( ! feof ( g_pSourceFile ) )
+        if ( fgetc ( g_pSourceFile ) == '\n' )
+            ++ g_iSourceCodeSize;
+    ++ g_iSourceCodeSize;
+    
+    // Close the file
+    
+    fclose ( g_pSourceFile );
+    
+    // Reopen the source file in ASCII mode
+    
+    if ( ! ( g_pSourceFile = fopen ( g_pstrSourceFilename, "r" ) ) )
+        ExitOnError ( "Could not open source file" );
+    
+    // Allocate an array of strings to hold each source line
+    
+    if ( ! ( g_ppstrSourceCode = ( char ** ) malloc ( g_iSourceCodeSize * sizeof ( char * ) ) ) )
+        ExitOnError ( "Could not allocate space for source code" );
+    
+    // Read the source code in from the file
+    
+    for ( int iCurrLineIndex = 0; iCurrLineIndex < g_iSourceCodeSize; ++ iCurrLineIndex )
+    {
+        // Allocate space for the line
+        
+        if ( ! ( g_ppstrSourceCode [ iCurrLineIndex ] = ( char * ) malloc ( MAX_SOURCE_LINE_SIZE + 1 ) ) )
+            ExitOnError ( "Could not allocate space for source line" );
+        
+        // Read in the current line
+        
+        fgets ( g_ppstrSourceCode [ iCurrLineIndex ], MAX_SOURCE_LINE_SIZE, g_pSourceFile );
+        
+        // Strip comments and trim whitespace
+        
+        StripComments ( g_ppstrSourceCode [ iCurrLineIndex ] );
+        TrimWhitespace ( g_ppstrSourceCode [ iCurrLineIndex ] );
+        
+        // Make sure to add a new newline if it was removed by the stripping of the
+        // comments and whitespace. We do this by checking the character right before
+        // the null terminator to see if it's \n. If not, we move the terminator over
+        // by one and add it. We use strlen () to find the position of the newline
+        // easily.
+        
+        int iNewLineIndex = (int) strlen ( g_ppstrSourceCode [ iCurrLineIndex ] ) - 1;
+        if ( g_ppstrSourceCode [ iCurrLineIndex ] [ iNewLineIndex ] != '\n' )
+        {
+            g_ppstrSourceCode [ iCurrLineIndex ] [ iNewLineIndex + 1 ] = '\n';
+            g_ppstrSourceCode [ iCurrLineIndex ] [ iNewLineIndex + 2 ] = '\0';
+        }
+    }
+    
+    // Close the source file
+    
+    fclose ( g_pSourceFile );
 }
 
 void BuildXSE ()
@@ -1566,9 +1709,564 @@ void BuildXSE ()
     }
 }
 
+void InitInstrTable ()
+{
+    // Create a temporary index to use with each instruction
+    
+    int iInstrIndex;
+    
+    // The following code makes repeated calls to AddInstrLookup () to add a hardcoded
+    // instruction set to the assembler's vocabulary. Each AddInstrLookup () call is
+    // followed by zero or more calls to SetOpType (), whcih set the supported types of
+    // a specific operand. The instructions are grouped by family.
+    
+    // ---- Main
+    
+    // Mov          Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "Mov", INSTR_MOV, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // ---- Arithmetic
+    
+    // Add         Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "Add", INSTR_ADD, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Sub          Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "Sub", INSTR_SUB, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Mul          Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "Mul", INSTR_MUL, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Div          Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "Div", INSTR_DIV, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Mod          Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "Mod", INSTR_MOD, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Exp          Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "Exp", INSTR_EXP, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Neg          Destination
+    
+    iInstrIndex = AddInstrLookup ( "Neg", INSTR_NEG, 1 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Inc          Destination
+    
+    iInstrIndex = AddInstrLookup ( "Inc", INSTR_INC, 1 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Dec          Destination
+    
+    iInstrIndex = AddInstrLookup ( "Dec", INSTR_DEC, 1 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // ---- Bitwise
+    
+    // And          Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "And", INSTR_AND, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Or           Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "Or", INSTR_OR, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // XOr          Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "XOr", INSTR_XOR, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Not          Destination
+    
+    iInstrIndex = AddInstrLookup ( "Not", INSTR_NOT, 1 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // ShL          Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "ShL", INSTR_SHL, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // ShR          Destination, Source
+    
+    iInstrIndex = AddInstrLookup ( "ShR", INSTR_SHR, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // ---- String Manipulation
+    
+    // Concat       String0, String1
+    
+    iInstrIndex = AddInstrLookup ( "Concat", INSTR_CONCAT, 2 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG |
+               OP_FLAG_TYPE_STRING );
+    
+    // GetChar      Destination, Source, Index
+    
+    iInstrIndex = AddInstrLookup ( "GetChar", INSTR_GETCHAR, 3 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG |
+               OP_FLAG_TYPE_STRING );
+    SetOpType ( iInstrIndex, 2, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG |
+               OP_FLAG_TYPE_INT );
+    
+    // SetChar      Destination, Index, Source
+    
+    iInstrIndex = AddInstrLookup ( "SetChar", INSTR_SETCHAR, 3 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG |
+               OP_FLAG_TYPE_INT );
+    SetOpType ( iInstrIndex, 2, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG |
+               OP_FLAG_TYPE_STRING );
+    
+    // ---- Conditional Branching
+    
+    // Jmp          Label
+    
+    iInstrIndex = AddInstrLookup ( "Jmp", INSTR_JMP, 1 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_LINE_LABEL );
+    
+    // JE           Op0, Op1, Label
+    
+    iInstrIndex = AddInstrLookup ( "JE", INSTR_JE, 3 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 2, OP_FLAG_TYPE_LINE_LABEL );
+    
+    // JNE          Op0, Op1, Label
+    
+    iInstrIndex = AddInstrLookup ( "JNE", INSTR_JNE, 3 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 2, OP_FLAG_TYPE_LINE_LABEL );
+    
+    // JG           Op0, Op1, Label
+    
+    iInstrIndex = AddInstrLookup ( "JG", INSTR_JG, 3 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 2, OP_FLAG_TYPE_LINE_LABEL );
+    
+    // JL           Op0, Op1, Label
+    
+    iInstrIndex = AddInstrLookup ( "JL", INSTR_JL, 3 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 2, OP_FLAG_TYPE_LINE_LABEL );
+    
+    // JGE          Op0, Op1, Label
+    
+    iInstrIndex = AddInstrLookup ( "JGE", INSTR_JGE, 3 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 2, OP_FLAG_TYPE_LINE_LABEL );
+    
+    // JLE           Op0, Op1, Label
+    
+    iInstrIndex = AddInstrLookup ( "JLE", INSTR_JLE, 3 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 1, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    SetOpType ( iInstrIndex, 2, OP_FLAG_TYPE_LINE_LABEL );
+    
+    // ---- The Stack Interface
+    
+    // Push          Source
+    
+    iInstrIndex = AddInstrLookup ( "Push", INSTR_PUSH, 1 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Pop           Destination
+    
+    iInstrIndex = AddInstrLookup ( "Pop", INSTR_POP, 1 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // ---- The Function Interface
+    
+    // Call          FunctionName
+    
+    iInstrIndex = AddInstrLookup ( "Call", INSTR_CALL, 1 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_FUNC_NAME );
+    
+    // Ret
+    
+    iInstrIndex = AddInstrLookup ( "Ret", INSTR_RET, 0 );
+    
+    // CallHost      FunctionName
+    
+    iInstrIndex = AddInstrLookup ( "CallHost", INSTR_CALLHOST, 1 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_HOST_API_CALL );
+    
+    // ---- Miscellaneous
+    
+    // Pause        Duration
+    
+    iInstrIndex = AddInstrLookup ( "Pause", INSTR_PAUSE, 1 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+    
+    // Exit         Code
+    
+    iInstrIndex = AddInstrLookup ( "Exit", INSTR_EXIT, 1 );
+    SetOpType ( iInstrIndex, 0, OP_FLAG_TYPE_INT |
+               OP_FLAG_TYPE_FLOAT |
+               OP_FLAG_TYPE_STRING |
+               OP_FLAG_TYPE_MEM_REF |
+               OP_FLAG_TYPE_REG );
+}
+
+void PrintLogo ()
+{
+    printf ( "XASM\n" );
+    printf ( "XtremeScript Assembler Version %d.%d\n", VERSION_MAJOR, VERSION_MINOR );
+    printf ( "\n" );
+}
+
+void PrintUsage ()
+{
+    printf ( "Usage:\tXASM Source.XASM [Executable.XSE]\n" );
+    printf ( "\n" );
+    printf ( "\t- File extensions are not required.\n" );
+    printf ( "\t- Executable name is optional; source name is used by default.\n" );
+}
+
+void Init ()
+{
+    // Initialize the master instruction lookup table
+    
+    InitInstrTable ();
+    
+    // Initialize tables
+    
+    InitLinkedList ( & g_SymbolTable );
+    InitLinkedList ( & g_LabelTable );
+    InitLinkedList ( & g_FuncTable );
+    InitLinkedList ( & g_StringTable );
+    InitLinkedList ( & g_HostAPICallTable );
+}
+
+void PrintAssmblStats ()
+{
+    // ---- Calculate statistics
+    
+    // Symbols
+    
+    // Create some statistic variables
+    
+    int iVarCount = 0,
+    iArrayCount = 0,
+    iGlobalCount = 0;
+    
+    // Create a pointer to traverse the list
+    
+    LinkedListNode * pCurrNode = g_SymbolTable.pHead;
+    
+    // Traverse the list to count each symbol type
+    
+    for ( int iCurrNode = 0; iCurrNode < g_SymbolTable.iNodeCount; ++ iCurrNode )
+    {
+        // Create a pointer to the current symbol structure
+        
+        SymbolNode * pCurrSymbol = ( SymbolNode * ) pCurrNode->pData;
+        
+        // It's an array if the size is greater than 1
+        
+        if ( pCurrSymbol->iSize > 1 )
+            ++ iArrayCount;
+        
+        // It's a variable otherwise
+        
+        else
+            ++ iVarCount;
+        
+        // It's a global if it's stack index is nonnegative
+        
+        if ( pCurrSymbol->iStackIndex >= 0 )
+            ++ iGlobalCount;
+        
+        // Move to the next node
+        
+        pCurrNode = pCurrNode->pNext;
+    }
+    
+    // Print out final calculations
+    
+    printf ( "%s created successfully!\n\n", g_pstrExecFilename );
+    printf ( "Source Lines Processed: %d\n", g_iSourceCodeSize );
+    
+    printf ( "            Stack Size: " );
+    if ( g_ScriptHeader.iStackSize )
+        printf ( "%d", g_ScriptHeader.iStackSize );
+    else
+        printf ( "Default" );
+    
+    printf ( "\n" );
+    printf ( "Instructions Assembled: %d\n", g_iInstrStreamSize );
+    printf ( "             Variables: %d\n", iVarCount );
+    printf ( "                Arrays: %d\n", iArrayCount );
+    printf ( "               Globals: %d\n", iGlobalCount );
+    printf ( "       String Literals: %d\n", g_StringTable.iNodeCount );
+    printf ( "                Labels: %d\n", g_LabelTable.iNodeCount );
+    printf ( "        Host API Calls: %d\n", g_HostAPICallTable.iNodeCount );
+    printf ( "             Functions: %d\n", g_FuncTable.iNodeCount );
+    
+    printf ( "      _Main () Present: " );
+    if ( g_ScriptHeader.iIsMainFuncPresent )
+        printf ( "Yes (Index %d)\n", g_ScriptHeader.iMainFuncIndex );
+    else
+        printf ( "No\n" );
+}
+
 // ---- Main -----
 
 int main (int argc, char * argv[])
 {
+    // Print the logo
     
+    PrintLogo ();
+    
+    // Validate the command line argument count
+    
+    if ( argc < 2 )
+    {
+        // If at least one filename isn't present, print the usage info and exit
+        
+        PrintUsage ();
+        return 0;
+    }
+    
+    // Before going any further, we need to validate the specified filenames. This may
+    // include appending file extensions if they aren't present, and possibly copying the
+    // source filename to the executable filename if the user didn't provide one.
+    
+    // First make a global copy of the source filename and convert it to uppercase
+    
+    strcpy ( g_pstrSourceFilename, argv [ 1 ] );
+    strupr ( g_pstrSourceFilename );
+    
+    // Check for the presence of the .XASM extension and add it if it's not there
+    
+    if ( ! strstr ( g_pstrSourceFilename, SOURCE_FILE_EXT ) )
+    {
+        // The extension was not found, so add it to string
+        
+        strcat ( g_pstrSourceFilename, SOURCE_FILE_EXT );
+    }
+    
+    // Was an executable filename specified?
+    
+    if ( argv [ 2 ] )
+    {
+        // Yes, so repeat the validation process
+        
+        strcpy ( g_pstrExecFilename, argv [ 2 ] );
+        strupr ( g_pstrExecFilename );
+        
+        // Check for the presence of the .XSE extension and add it if it's not there
+        
+        if ( ! strstr ( g_pstrExecFilename, EXEC_FILE_EXT ) )
+        {
+            // The extension was not found, so add it to string
+            
+            strcat ( g_pstrExecFilename, EXEC_FILE_EXT );
+        }
+    }
+    else
+    {
+        // No, so base it on the source filename
+        
+        // First locate the start of the extension, and use pointer subtraction to find the index
+        
+        int ExtOffset = (int) (strrchr ( g_pstrSourceFilename, '.' ) - g_pstrSourceFilename);
+        strncpy ( g_pstrExecFilename, g_pstrSourceFilename, ExtOffset );
+        
+        // Append null terminator
+        
+        g_pstrExecFilename [ ExtOffset ] = '\0';
+        
+        // Append executable extension
+        
+        strcat ( g_pstrExecFilename, EXEC_FILE_EXT );
+    }
+    
+    // Initialize the assembler
+    
+    Init ();
+    
+    // Load the source file into memory
+    
+    LoadSourceFile ();
+    
+    // Assemble the source file
+    
+    printf ( "Assembling %s...\n\n", g_pstrSourceFilename );
+    
+    AssmblSourceFile ();
+    
+    // Dump the assembled executable to an .XSE file
+    
+    BuildXSE ();
+    
+    // Print out assembly statistics
+    
+    PrintAssmblStats ();
+    
+    // Free resources and perform general cleanup
+    
+    ShutDown ();
+    
+    return 0;
 }

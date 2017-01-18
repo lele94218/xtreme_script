@@ -360,6 +360,7 @@ int g_iCurrInstrIndex;                              // The current instruction's
 ScriptHeader g_ScriptHeader;
 int g_iIsSetStackSizeFound;
 
+FILE * g_pSourceFile = NULL;
 
 // The main tables
 LinkedList g_StringTable;
@@ -396,6 +397,7 @@ Token GetNextToken();
 char GetLookAheadChar ();
 char * GetCurrLexeme ();
 
+void LoadSourceFile();
 void BuildXSE();
 
 void strupr(char * pstrString);
@@ -403,3 +405,9 @@ void Exit ();
 void ExitOnError (char * pstrErrorMssg);
 void ExitOnCodeError (const char * pstrErrorMssg);
 void ExitOnCharExpectedError (char cChar);
+
+void InitInstrTable ();
+void PrintLogo ();
+void PrintUsage ();
+void Init ();
+void PrintAssmblStats ();
