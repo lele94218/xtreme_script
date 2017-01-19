@@ -1010,12 +1010,16 @@ char GetLookAheadChar ()
 
 void StripComments (char * pstrSourceLine)
 {
-    unsigned int iCurrCharIndex;
+    int iCurrCharIndex;
     int iInString;
     
     iInString = 0;
-    printf("sc: %lu\n", strlen(pstrSourceLine));
-    for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrSourceLine) - 1; ++ iCurrCharIndex)
+    // Must check blank line!!
+    int iLineLength = (int) strlen (pstrSourceLine);
+    if (!iLineLength)
+        return;
+    
+    for (iCurrCharIndex = 0; iCurrCharIndex < iLineLength; ++ iCurrCharIndex)
     {
         if (pstrSourceLine[iCurrCharIndex] == '"')
         {
@@ -1505,7 +1509,6 @@ void LoadSourceFile ()
     
     // Read the source code in from the file
     
-    puts("ok");
     
     for ( int iCurrLineIndex = 0; iCurrLineIndex < g_iSourceCodeSize; ++ iCurrLineIndex )
     {
@@ -1518,7 +1521,6 @@ void LoadSourceFile ()
         
         fgets ( g_ppstrSourceCode [ iCurrLineIndex ], MAX_SOURCE_LINE_SIZE, g_pSourceFile );
         
-        printf("%d: %lu\n", iCurrLineIndex, strlen(g_ppstrSourceCode[iCurrLineIndex]));
         // Strip comments and trim whitespace
         
         StripComments ( g_ppstrSourceCode [ iCurrLineIndex ] );
@@ -1530,12 +1532,12 @@ void LoadSourceFile ()
         // by one and add it. We use strlen () to find the position of the newline
         // easily.
         
-        int iNewLineIndex = (int) strlen ( g_ppstrSourceCode [ iCurrLineIndex ] ) - 1;
-        if ( g_ppstrSourceCode [ iCurrLineIndex ] [ iNewLineIndex ] != '\n' )
-        {
-            g_ppstrSourceCode [ iCurrLineIndex ] [ iNewLineIndex + 1 ] = '\n';
-            g_ppstrSourceCode [ iCurrLineIndex ] [ iNewLineIndex + 2 ] = '\0';
-        }
+//        int iNewLineIndex = (int) strlen ( g_ppstrSourceCode [ iCurrLineIndex ] ) - 1;
+//        if ( g_ppstrSourceCode [ iCurrLineIndex ] [ iNewLineIndex ] != '\n' )
+//        {
+//            g_ppstrSourceCode [ iCurrLineIndex ] [ iNewLineIndex + 1 ] = '\n';
+//            g_ppstrSourceCode [ iCurrLineIndex ] [ iNewLineIndex + 2 ] = '\0';
+//        }
     }
     
     puts("ok");
