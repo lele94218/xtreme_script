@@ -204,8 +204,14 @@ void AssmblSourceFile ()
             }
                 
             default:
-                if (g_Lexer.CurrToken != TOKEN_TYPE_NEWLINE)
+            {
+                if (g_Lexer.CurrToken != TOKEN_TYPE_NEWLINE) {
+                    //debug
+                    puts("first pass!");
+                    printf("%d\n", g_Lexer.CurrToken);
                     ExitOnCodeError(ERROR_MSSG_INVALID_INPUT);
+                }
+            }
         }
         
     }
@@ -615,9 +621,10 @@ void AssmblSourceFile ()
                             // Anything else
                             
                         default:
-                            
+                        {
                             ExitOnCodeError ( ERROR_MSSG_INVALID_OP );
                             break;
+                        }
                     }
                     
                     // Make sure a comma follows the operand, unless it's the last one
@@ -630,8 +637,11 @@ void AssmblSourceFile ()
                     }
                 }
                 
-                if (GetNextToken() != TOKEN_TYPE_NEWLINE)
+                if (GetNextToken() != TOKEN_TYPE_NEWLINE) {
+                    //debug
+                    puts("second pass!");
                     ExitOnCodeError(ERROR_MSSG_INVALID_INPUT);
+                }
                 
                 g_pInstrStream[g_iCurrInstrIndex].pOpList = pOpList;
                 
@@ -1004,6 +1014,7 @@ void StripComments (char * pstrSourceLine)
     int iInString;
     
     iInString = 0;
+    printf("sc: %lu\n", strlen(pstrSourceLine));
     for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrSourceLine) - 1; ++ iCurrCharIndex)
     {
         if (pstrSourceLine[iCurrCharIndex] == '"')
@@ -1067,7 +1078,7 @@ void TrimWhitespace (char * pstrString)
 {
     unsigned int iStringLength = (int) strlen (pstrString);
     unsigned int iPadLength;
-    unsigned int iCurrCharIndex;
+    int iCurrCharIndex;
     
     if (iStringLength > 1)
     {
@@ -1087,8 +1098,7 @@ void TrimWhitespace (char * pstrString)
                 pstrString[iCurrCharIndex] = ' ';
         }
         
-        for (iCurrCharIndex = iStringLength - 1; iCurrCharIndex > 0;
-             -- iCurrCharIndex)
+        for (iCurrCharIndex = iStringLength - 1; iCurrCharIndex >= 0; -- iCurrCharIndex)
         {
             if (!IsCharWhitespace(pstrString[iCurrCharIndex]))
             {
@@ -1144,12 +1154,11 @@ int IsStringInteger (char * pstrString)
     unsigned int iCurrCharIndex;
     
     for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-        if (!IsCharNumeric (pstrString[iCurrCharIndex]) &&
-            !(pstrString[iCurrCharIndex] == '-'))
+        if (!IsCharNumeric (pstrString[iCurrCharIndex]) && !(pstrString[iCurrCharIndex] == '-'))
             return false;
     
     for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++ iCurrCharIndex)
-        if (pstrString[iCurrCharIndex == '-'])
+        if (pstrString[iCurrCharIndex] == '-')
             return false;
     
     return true;
@@ -1217,8 +1226,7 @@ Token GetNextToken ()
     {
         while (true)
         {
-            if (!IsCharWhitespace(g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
-                                  [g_Lexer.iIndex0]))
+            if (!IsCharWhitespace(g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex0]))
                 break;
             
             ++ g_Lexer.iIndex0;
@@ -1231,9 +1239,10 @@ Token GetNextToken ()
     {
         if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
         {
-            if (g_Lexer.iIndex1 >=
-                strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
+            if (g_Lexer.iIndex1 >= strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
             {
+                //debug
+                puts("first invalid");
                 g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
                 return g_Lexer.CurrToken;
             }
@@ -1252,12 +1261,10 @@ Token GetNextToken ()
         
         else
         {
-            if (g_Lexer.iIndex1 >=
-                strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
+            if (g_Lexer.iIndex1 >= strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
                 break;
             
-            if (IsCharDelimiter (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]
-                                 [g_Lexer.iIndex1]))
+            if (IsCharDelimiter (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex1]))
                 break;
             
             ++ g_Lexer.iIndex1;
@@ -1268,16 +1275,13 @@ Token GetNextToken ()
         ++ g_Lexer.iIndex1;
     
     unsigned int iCurrDestIndex = 0;
-    for (unsigned int iCurrSourceIndex = g_Lexer.iIndex0;
-         iCurrSourceIndex < g_Lexer.iIndex1; ++ iCurrSourceIndex)
+    for (unsigned int iCurrSourceIndex = g_Lexer.iIndex0; iCurrSourceIndex < g_Lexer.iIndex1; ++ iCurrSourceIndex)
     {
         if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
-            if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex]
-                == '\\')
+            if (g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex] == '\\')
                 ++ iCurrSourceIndex;
         
-        g_Lexer.pstrCurrLexeme[iCurrDestIndex] =
-        g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex];
+        g_Lexer.pstrCurrLexeme[iCurrDestIndex] = g_ppstrSourceCode[g_Lexer.iCurrSourceLine][iCurrSourceIndex];
         
         ++ iCurrDestIndex;
     }
@@ -1288,6 +1292,7 @@ Token GetNextToken ()
         strupr (g_Lexer.pstrCurrLexeme);
     
     g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
+    
     
     if (strlen(g_Lexer.pstrCurrLexeme) > 1 || g_Lexer.pstrCurrLexeme[0] != '"')
     {
@@ -1343,8 +1348,13 @@ Token GetNextToken ()
             case '\n':
                 g_Lexer.CurrToken = TOKEN_TYPE_NEWLINE;
                 break;
+            
+                
         }
     }
+    
+    puts(GetCurrLexeme());
+    printf("%lu %d\n", strlen(GetCurrLexeme()), g_Lexer.pstrCurrLexeme[3]);
     
     if (IsStringInteger (g_Lexer.pstrCurrLexeme))
         g_Lexer.CurrToken = TOKEN_TYPE_INT;
@@ -1372,6 +1382,7 @@ Token GetNextToken ()
     if (GetInstrByMnemonic(g_Lexer.pstrCurrLexeme, & Instr))
         g_Lexer.CurrToken = TOKEN_TYPE_INSTR;
     
+    printf("%d\n", g_Lexer.CurrToken);
     return g_Lexer.CurrToken;
 }
 
@@ -1474,6 +1485,8 @@ void LoadSourceFile ()
             ++ g_iSourceCodeSize;
     ++ g_iSourceCodeSize;
     
+    printf("%d\n", g_iSourceCodeSize);
+    
     // Close the file
     
     fclose ( g_pSourceFile );
@@ -1485,22 +1498,27 @@ void LoadSourceFile ()
     
     // Allocate an array of strings to hold each source line
     
-    if ( ! ( g_ppstrSourceCode = ( char ** ) malloc ( g_iSourceCodeSize * sizeof ( char * ) ) ) )
+    g_ppstrSourceCode = ( char ** ) malloc ( g_iSourceCodeSize * sizeof ( char * ));
+    if (!(g_ppstrSourceCode))
         ExitOnError ( "Could not allocate space for source code" );
     
+    
     // Read the source code in from the file
+    
+    puts("ok");
     
     for ( int iCurrLineIndex = 0; iCurrLineIndex < g_iSourceCodeSize; ++ iCurrLineIndex )
     {
         // Allocate space for the line
-        
-        if ( ! ( g_ppstrSourceCode [ iCurrLineIndex ] = ( char * ) malloc ( MAX_SOURCE_LINE_SIZE + 1 ) ) )
+        g_ppstrSourceCode [ iCurrLineIndex ] = (char *) malloc(MAX_SOURCE_LINE_SIZE + 1);
+        if (!g_ppstrSourceCode)
             ExitOnError ( "Could not allocate space for source line" );
         
         // Read in the current line
         
         fgets ( g_ppstrSourceCode [ iCurrLineIndex ], MAX_SOURCE_LINE_SIZE, g_pSourceFile );
         
+        printf("%d: %lu\n", iCurrLineIndex, strlen(g_ppstrSourceCode[iCurrLineIndex]));
         // Strip comments and trim whitespace
         
         StripComments ( g_ppstrSourceCode [ iCurrLineIndex ] );
@@ -1519,6 +1537,17 @@ void LoadSourceFile ()
             g_ppstrSourceCode [ iCurrLineIndex ] [ iNewLineIndex + 2 ] = '\0';
         }
     }
+    
+    puts("ok");
+    
+    // debug
+    puts("debuging...");
+    for ( int iCurrLineIndex = 0; iCurrLineIndex < g_iSourceCodeSize; ++ iCurrLineIndex )
+    {
+        printf("%s", g_ppstrSourceCode[iCurrLineIndex]);
+    }
+    //
+     
     
     // Close the source file
     
@@ -2174,6 +2203,8 @@ void PrintAssmblStats ()
 
 int main (int argc, char * argv[])
 {
+    
+    
     // Print the logo
     
     PrintLogo ();
@@ -2243,6 +2274,7 @@ int main (int argc, char * argv[])
     }
     
     // Initialize the assembler
+    printf("Init....\n");
     
     Init ();
     
