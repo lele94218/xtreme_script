@@ -137,7 +137,7 @@ void AssmblSourceFile ()
                 iCurrFuncParamCount = 0;
                 iCurrFuncLocalDataSize = 0;
                 
-                while (GetNextToken () == TOKEN_TYPE_OPEN_BRACE);
+                while (GetNextToken () == TOKEN_TYPE_NEWLINE);
                 
                 if (g_Lexer.CurrToken != TOKEN_TYPE_OPEN_BRACE)
                     ExitOnCharExpectedError ('{');
@@ -207,13 +207,16 @@ void AssmblSourceFile ()
             {
                 if (g_Lexer.CurrToken != TOKEN_TYPE_NEWLINE) {
                     //debug
-                    puts("first pass!");
-                    printf("%d\n", g_Lexer.CurrToken);
+//                    puts("first pass!");
+//                    printf("%d\n", g_Lexer.CurrToken);
                     ExitOnCodeError(ERROR_MSSG_INVALID_INPUT);
                 }
             }
         }
         
+        // to next line
+        if (!SkipToNextLine())
+            break;
     }
     
     g_pInstrStream = (Instr * ) malloc(g_iInstrStreamSize * sizeof(Instr));
@@ -296,13 +299,13 @@ void AssmblSourceFile ()
                 g_pInstrStream[g_iCurrInstrIndex].iOpCount = CurrInstr.iOpCount;
                 Op * pOpList = (Op *) malloc(CurrInstr.iOpCount * sizeof(Op));
                 
+                
                 for (int iCurrOpIndex = 0; iCurrOpIndex < CurrInstr.iOpCount; ++ iCurrOpIndex)
                 {
                     OpTypes CurrOpTypes = CurrInstr.OpList[iCurrOpIndex];
                     Token InitOpToken = GetNextToken();
-                    
-                    switch (InitOpToken) {
-                            
+                    switch (InitOpToken)
+                    {
                         case TOKEN_TYPE_INT:
                         {
                             if (CurrOpTypes & OP_FLAG_TYPE_INT)
@@ -311,7 +314,9 @@ void AssmblSourceFile ()
                                 pOpList[iCurrOpIndex].iIntLiteral = atoi(GetCurrLexeme());
                             }
                             else
+                            {
                                 ExitOnCodeError(ERROR_MSSG_INVALID_OP);
+                            }
                             break;
                         }
                             
@@ -638,8 +643,8 @@ void AssmblSourceFile ()
                 }
                 
                 if (GetNextToken() != TOKEN_TYPE_NEWLINE) {
-                    //debug
-                    puts("second pass!");
+//                    //debug
+//                    puts("second pass!");
                     ExitOnCodeError(ERROR_MSSG_INVALID_INPUT);
                 }
                 
@@ -920,8 +925,7 @@ int AddInstrLookup ( const char * pstrMnemonic, int iOpcode, int iOpCount )
     g_InstrTable [ iInstrIndex ].iOpcode = iOpcode;
     g_InstrTable [ iInstrIndex ].iOpCount = iOpCount;
     
-    g_InstrTable [ iInstrIndex ].OpList = ( OpTypes * )
-    malloc ( iOpCount * sizeof ( OpTypes ) );
+    g_InstrTable [ iInstrIndex ].OpList = ( OpTypes * ) malloc ( iOpCount * sizeof ( OpTypes ) );
     
     int iReturnInstrIndex = iInstrIndex;
     
@@ -932,15 +936,14 @@ int AddInstrLookup ( const char * pstrMnemonic, int iOpcode, int iOpCount )
 
 void SetOpType ( int iInstrIndex, int iOpIndex, OpTypes iOpType )
 {
-    g_InstrTable [ iInstrIndex ].OpList [ iOpIndex] = iOpIndex;
+    g_InstrTable [ iInstrIndex ].OpList [ iOpIndex] = iOpType;
 }
 
 int GetInstrByMnemonic ( char * pstrMnemonic, InstrLookup * pInstr )
 {
     for ( int iCurrInstrIndex = 0; iCurrInstrIndex < MAX_INSTR_LOOKUP_COUNT; ++ iCurrInstrIndex )
     {
-        if ( strcmp ( g_InstrTable [ iCurrInstrIndex ].pstrMnemonic,
-                     pstrMnemonic ) == 0 )
+        if (strlen(pstrMnemonic) > 0 && strcmp ( g_InstrTable [ iCurrInstrIndex ].pstrMnemonic, pstrMnemonic ) == 0 )
         {
             * pInstr = g_InstrTable [ iCurrInstrIndex ];
             return true;
@@ -1246,7 +1249,7 @@ Token GetNextToken ()
             if (g_Lexer.iIndex1 >= strlen (g_ppstrSourceCode[g_Lexer.iCurrSourceLine]))
             {
                 //debug
-                puts("first invalid");
+//                puts("first invalid");
                 g_Lexer.CurrToken = TOKEN_TYPE_INVALID;
                 return g_Lexer.CurrToken;
             }
@@ -1357,8 +1360,6 @@ Token GetNextToken ()
         }
     }
     
-    puts(GetCurrLexeme());
-    printf("%lu %d\n", strlen(GetCurrLexeme()), g_Lexer.pstrCurrLexeme[3]);
     
     if (IsStringInteger (g_Lexer.pstrCurrLexeme))
         g_Lexer.CurrToken = TOKEN_TYPE_INT;
@@ -1386,7 +1387,7 @@ Token GetNextToken ()
     if (GetInstrByMnemonic(g_Lexer.pstrCurrLexeme, & Instr))
         g_Lexer.CurrToken = TOKEN_TYPE_INSTR;
     
-    printf("%d\n", g_Lexer.CurrToken);
+//    printf("%s: %d\n", g_Lexer.pstrCurrLexeme, g_Lexer.CurrToken);
     return g_Lexer.CurrToken;
 }
 
@@ -1489,8 +1490,6 @@ void LoadSourceFile ()
             ++ g_iSourceCodeSize;
     ++ g_iSourceCodeSize;
     
-    printf("%d\n", g_iSourceCodeSize);
-    
     // Close the file
     
     fclose ( g_pSourceFile );
@@ -1540,14 +1539,14 @@ void LoadSourceFile ()
 //        }
     }
     
-    puts("ok");
-    
-    // debug
-    puts("debuging...");
-    for ( int iCurrLineIndex = 0; iCurrLineIndex < g_iSourceCodeSize; ++ iCurrLineIndex )
-    {
-        printf("%s", g_ppstrSourceCode[iCurrLineIndex]);
-    }
+//    puts("ok");
+//    
+//    // debug
+//    puts("debuging...");
+//    for ( int iCurrLineIndex = 0; iCurrLineIndex < g_iSourceCodeSize; ++ iCurrLineIndex )
+//    {
+//        printf("%s", g_ppstrSourceCode[iCurrLineIndex]);
+//    }
     //
      
     
@@ -2089,6 +2088,7 @@ void InitInstrTable ()
                OP_FLAG_TYPE_MEM_REF |
                OP_FLAG_TYPE_REG );
     
+    
     // Exit         Code
     
     iInstrIndex = AddInstrLookup ( "Exit", INSTR_EXIT, 1 );
@@ -2276,7 +2276,6 @@ int main (int argc, char * argv[])
     }
     
     // Initialize the assembler
-    printf("Init....\n");
     
     Init ();
     
@@ -2285,6 +2284,7 @@ int main (int argc, char * argv[])
     LoadSourceFile ();
     
     // Assemble the source file
+    
     
     printf ( "Assembling %s...\n\n", g_pstrSourceFilename );
     
