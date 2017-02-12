@@ -91,6 +91,7 @@ typedef struct _Value
 		char * pstrStringLiteral;
 		int iStackIndex;
 		int iInstrIndex;
+        int iFuncIndex;
 		int iHostAPICallIndex;
 		int iReg;
     };
@@ -234,10 +235,57 @@ int LoadScript(char * pstrFilename)
                 case OP_TYPE_INT:
                     fread(&pOpList[iCurrOpIndex].iIntLiteral, sizeof(int), 1, pScriptFile);
                     break;
-                    
-                default:
+                case OP_TYPE_FLOAT:
+                    fread(&pOpList[iCurrOpIndex].fFloatLiteral, sizeof(float), 1, pScriptFile);
+                    break;
+                case OP_TYPE_STRING:
+                    /* Since there is no filed in the Value structure for string table indices, read the
+                     * index into the integer literal field and set its type to string index
+                     */
+                    fread(&pOpList[iCurrOpIndex].iIntLiteral, sizeof(int), 1, pScriptFile);
+                    break;
+                case OP_TYPE_INSTR_INDEX:
+                    fread(&pOpList[iCurrOpIndex].iInstrIndex, sizeof(int), 1, pScriptFile);
+                    break;
+                case OP_TYPE_ABS_STACK_INDEX:
+                    fread(&pOpList[iCurrOpIndex].iStackIndex, sizeof(int), 1, pScriptFile);
+                    break;
+                case OP_TYPE_REL_STACK_INDEX:
+                    fread(&pOpList[iCurrOpIndex].iStackIndex, sizeof(int), 1, pScriptFile);
+                    fread(&pOpList[iCurrOpIndex].iOffsetIndex, sizeof(int), 1, pScriptFile);
+                    break;
+                case OP_TYPE_FUNC_INDEX:
+                    fread(&pOpList[iCurrOpIndex].iFuncIndex, sizeof(int), 1, pScriptFile);
+                    break;
+                case OP_TYPE_HOST_API_CALL_INDEX:
+                    fread(&pOpList[iCurrOpIndex].iHostAPICallIndex, sizeof(int), 1, pScriptFile);
+                    break;
+                case OP_TYPE_REG:
+                    fread(&pOpList[iCurrOpIndex].iReg, sizeof(int), 1, pScriptFile);
                     break;
             }
+        }
+        g_Script.InstrStream.pInstr[iCurrInstrIndex].pOpList = pOpList;
+    }
+    
+    /* Read the string table */
+    int iStringTableSize;
+    fread(&iStringTableSize, 4, 1, pScriptFile);
+    
+    if (iStringTableSize)
+    {
+        char ** ppstrStringTable = (char **) malloc(iStringTableSize * sizeof(char *));
+        
+        for (int iCurrStringIndex = 0; iCurrStringIndex < iStringTableSize; ++ iCurrStringIndex)
+        {
+            int iStringSize;
+            fread(&iStringSize, 4, 1, pScriptFile);
+            char * pstrCurrString = (char *) malloc(iStringSize + 1);
+            
+            fread(pstrCurrString, iStringSize, 1, pScriptFile);
+            pstrCurrString[iStringSize] = '\0';
+            
+            ppstrStringTable[iCurrStringIndex] = pstrCurrString;
         }
     }
     
