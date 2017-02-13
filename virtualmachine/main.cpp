@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <sys/select.h>
 
 /* File I/O */
 #define EXEC_FILE_EXT				".XSE"
@@ -80,6 +82,8 @@
 
 #define MAX_COERCION_STRING_SIZE    65          // The maximum allocated
 
+/* ------------------------------ Data structure ------------------------------ */
+
 /* Runtime Value */
 typedef struct _Value
 {
@@ -123,6 +127,7 @@ typedef struct _RuntimeStack
     Value * pElmnts;
     int iSize;
     int iTopIndex;
+    /* Total size of the stack frame */
     int iFrameIndex;
 }
 RuntimeStack;
@@ -166,12 +171,26 @@ typedef struct _Script
 }
 Script;
 
+/* ------------------------------------ Global --------------------------------------- */
 Script g_Script;
+char ppstrMnemonics [][12] =
+{
+    "Mov",
+    "Add", "Sub", "Mul", "Div", "Mod", "Exp", "Neg", "Inc", "Dec",
+    "And", "Or", "XOr", "Not", "ShL", "ShR",
+    "Concat", "GetChar", "SetChar",
+    "Jmp", "JE", "JNE", "JG", "JL", "JGE", "JLE",
+    "Push", "Pop",
+    "Call", "Ret", "CallHost",
+    "Pause", "Exit"
+};
 
 
-/* Function declarations */
+/* ------------------------------ Function declarations ------------------------------ */
+int kbhit();
 int LoadScript(char *);
 int GetOpType(int);
+int ResolveOpType(int);
 int ResloveOpStackIndex(int);
 Value ResolveOpValue(int);
 Value GetStackValue(int);
@@ -179,8 +198,56 @@ int ResolveOpAsInt(int);
 float ResolveOpAsFloat(int);
 char * ResolveOpAsString(int);
 char * CoerceValueToString(Value);
+Value GetStackValue(int);
+void SetStackValue(int, Value);
+void Push(Value);
+Value Pop();
+void PushFrame(int);
+void PopFrame(int);
+void CopyValue(Value *, Value);
+Value * ResolveOpPntr(int);
+void Runscript();
+int GetCurrTime();
 
-/* Function implements */
+/* ------------------------------------- Macros -------------------------------------- */
+
+#define ResolveStackIndex(iIndex) \
+    (iIndex < 0 ? iIndex += g_Script.Stack.iFrameIndex : iIndex)
+
+/* ------------------------------ Function implements -------------------------------- */
+int kbhit()
+{
+    struct timeval tv;
+    fd_set read_fd;
+    
+    /* Do not wait at all, not even a microsecond */
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    
+    /* Must be done first to initialize read_fd */
+    FD_ZERO(&read_fd);
+    
+    /* Makes select() ask if input is ready:
+     * 0 is the file descriptor for stdin    */
+    FD_SET(0,&read_fd);
+    
+    /* The first parameter is the number of the
+     * largest file descriptor to check + 1. */
+    if(select(1, &read_fd, NULL, NULL, &tv) == -1)
+        return 0;  /* An error occured */
+    
+    /*  read_fd now holds a bit map of files that are
+     * readable. We test the entry for the standard
+     * input (file 0). */
+    
+    if(FD_ISSET(0,&read_fd))
+    /* Character pending on stdin */
+        return 1;
+    
+    /* no characters were pending */
+    return 0;
+}
+
 int LoadScript(char * pstrFilename)
 {
     FILE * pScriptFile;
@@ -395,6 +462,126 @@ int LoadScript(char * pstrFilename)
     return LOAD_OK;
 }
 
+/* Runs the currenty load script until a key is pressed or the script exits. */
+void RunScript()
+{
+    int iExitExecLoop = false;
+    
+    while (!kbhit())
+    {
+        if (g_Script.iIsPaused)
+        {
+            if (GetCurrTime() >= g_Script.iPauseEndTime)
+            {
+                g_Script.iIsPaused = false;
+            }
+            else
+            {
+                continue;
+            }
+        }
+        
+        int iCurrInstr = g_Script.InstrStream.iCurrInstr;
+        
+        int iOpcode = g_Script.InstrStream.pInstr[iCurrInstr].iOpcode;
+        
+        /* Print some info about the instruction */
+        
+        printf("\t");
+        
+        if (iOpcode < 10)
+            printf(" %d", iOpcode);
+        else
+            printf("%d", iOpcode);
+        printf(" %s ", ppstrMnemonics[iOpcode]);
+        
+        switch(iOpcode) {
+            /* Binary operations */
+            case INSTR_MOV:
+            case INSTR_ADD:
+            case INSTR_SUB:
+            case INSTR_MUL:
+            case INSTR_DIV:
+            case INSTR_MOD:
+            case INSTR_EXP:
+            case INSTR_AND:
+            case INSTR_OR:
+            case INSTR_XOR:
+            case INSTR_SHL:
+            case INSTR_SHR:
+            {
+                Value Dest = ResolveOpValue(0);
+                Value Source = ResolveOpValue(1);
+                
+                switch (iOpcode) {
+                    case INSTR_MOV:
+                        /* Skip when the two operands are the same */
+                        if (ResolveOpPntr(0) == ResolveOpPntr(1))
+                            break;
+                        CopyValue(&Dest, Source);
+                        break;
+                        
+                    case INSTR_ADD:
+                        if (Dest.iType == OP_TYPE_INT)
+                            Dest.iIntLiteral += ResolveOpAsInt(1);
+                        else
+                            Dest.fFloatLiteral += ResolveOpAsFloat(1);
+                        break;
+                    
+                    
+                        
+                    default:
+                        break;
+                }
+            }
+                
+        }
+        
+        printf("\n");
+        
+        /* If the instruction pointer hasn't been changed by an instruction.*/
+        if (iCurrInstr == g_Script.InstrStream.iCurrInstr)
+            ++ g_Script.InstrStream.iCurrInstr;
+        
+        if (iExitExecLoop)
+            break;
+    }
+}
+
+/* Reset the script */
+void ResetScript()
+{
+    int iMainFuncIndex = g_Script.iMainFuncIndex;
+    
+    /* If the function table is present, set the entry point */
+    if (g_Script.pFuncTable)
+    {
+        if (g_Script.iIsMainFuncPresent)
+        {
+            g_Script.InstrStream.iCurrInstr = g_Script.pFuncTable[iMainFuncIndex].iEntryPoint;
+        }
+    }
+    
+    /* Clear the stack */
+    for (int iCurrElmntIndex = 0; iCurrElmntIndex < g_Script.Stack.iSize; ++ iCurrElmntIndex)
+    {
+        g_Script.Stack.pElmnts[iCurrElmntIndex].iType = OP_TYPE_NULL;
+    }
+    
+    /* Unpause the script */
+    g_Script.iIsPaused = false;
+    
+    /* Allocate space for the globals */
+    PushFrame(g_Script.iGlobalDataSize);
+    
+    /* If _Main() is present, push it's stack frame (plus one extra stack element to
+     * compensate for the function index that usually sits on top of stack frames and
+     * causes indeices to start from -2)
+     */
+    PushFrame(g_Script.pFuncTable[iMainFuncIndex].iStackFrameSize + 1);
+    
+}
+
 /* Coerces a Value structure from it's current type to a string value. */
 char * CoerceValueToString(Value Val)
 {
@@ -445,6 +632,7 @@ float CoerceValueToFloat(Value Val)
     }
 }
 
+/* Returns the type of the specified operand in the current instruction. */
 int GetOpType(int iOpIndex)
 {
     int iCurrInstr = g_Script.InstrStream.iCurrInstr;
@@ -452,6 +640,14 @@ int GetOpType(int iOpIndex)
     return g_Script.InstrStream.pInstr[iCurrInstr].pOpList[iOpIndex].iType;
 }
 
+/* Resolves the type of the specified operand in the current instruction and returns the
+ * resolved type
+ */
+int ResolveOpType(int iOpIndex)
+{
+    Value OpValue = ResolveOpValue(iOpIndex);
+    return OpValue.iType;
+}
 
 int ResolveOpAsInt(int iOpIndex)
 {
@@ -520,8 +716,75 @@ Value ResolveOpValue(int iOpIndex)
 
 Value GetStackValue(int iIndex)
 {
-    Value v;
-    return v;
+    return g_Script.Stack.pElmnts[ResolveStackIndex(iIndex)];
+}
+
+void SetStackValue(int iIndex, Value Val)
+{
+    g_Script.Stack.pElmnts[ResolveStackIndex(iIndex)] = Val;
+}
+
+void Push(Value Val)
+{
+    int iTopIndex = g_Script.Stack.iTopIndex;
+    g_Script.Stack.pElmnts[iTopIndex] = Val;
+    ++ g_Script.Stack.iTopIndex;
+}
+
+Value Pop()
+{
+    -- g_Script.Stack.iTopIndex;
+    int iTopIndex = g_Script.Stack.iTopIndex;
+    Value Val = g_Script.Stack.pElmnts[iTopIndex];
+    return Val;
+}
+
+void PushFrame(int iSize)
+{
+    g_Script.Stack.iTopIndex += iSize;
+    g_Script.Stack.iFrameIndex = g_Script.Stack.iTopIndex;
+}
+
+void PopFrame(int iSize)
+{
+    g_Script.Stack.iTopIndex -= iSize;
+}
+
+/* Copies a value structure to another, taking string into account. */
+void CopyValue(Value * pDest, Value Source)
+{
+    /* If the destination already contains a string, make sure to free it first */
+    if (pDest->iType == OP_TYPE_STRING)
+    {
+        free(pDest->pstrStringLiteral);
+    }
+    
+    /* Copyt the objext */
+    * pDest = Source;
+    
+    if (Source.iType == OP_TYPE_STRING)
+    {
+        pDest->pstrStringLiteral = (char *) malloc(strlen(Source.pstrStringLiteral) + 1);
+        strcpy(pDest->pstrStringLiteral, Source.pstrStringLiteral);
+    }
+        
+}
+
+/* Returns the function corresponding to the specified index. */
+Func GetFunc(int iIndex)
+{
+    return g_Script.pFuncTable[iIndex];
+}
+
+/* Returns the host API call corresponding to the specified index. */
+char * GetHostAPICall(int iIndex)
+{
+    return g_Script.HostAPICallTable.ppstrCalls[iIndex];
+}
+
+int GetCurrTime()
+{
+    return (int) time(0);
 }
 
 int main()
