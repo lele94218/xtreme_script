@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 #include <sys/select.h>
 
 /* File I/O */
@@ -158,13 +159,13 @@ typedef struct _Script
     int iMainFuncIndex;
     int iIsPaused;
     int iPauseEndTime;
-    
+
     /* Register file */
     Value _RetVal;
-    
+
     /* Script data */
     InstrStream InstrStream;
-    
+
     RuntimeStack Stack;
     Func * pFuncTable;
     HostAPICallTable HostAPICallTable;
@@ -191,7 +192,7 @@ int kbhit();
 int LoadScript(char *);
 int GetOpType(int);
 int ResolveOpType(int);
-int ResloveOpStackIndex(int);
+int ResolveOpStackIndex(int);
 Value ResolveOpValue(int);
 Value GetStackValue(int);
 int ResolveOpAsInt(int);
@@ -219,31 +220,31 @@ int kbhit()
 {
     struct timeval tv;
     fd_set read_fd;
-    
+
     /* Do not wait at all, not even a microsecond */
     tv.tv_sec = 0;
     tv.tv_usec = 0;
-    
+
     /* Must be done first to initialize read_fd */
     FD_ZERO(&read_fd);
-    
+
     /* Makes select() ask if input is ready:
      * 0 is the file descriptor for stdin    */
     FD_SET(0,&read_fd);
-    
+
     /* The first parameter is the number of the
      * largest file descriptor to check + 1. */
     if(select(1, &read_fd, NULL, NULL, &tv) == -1)
         return 0;  /* An error occured */
-    
+
     /*  read_fd now holds a bit map of files that are
      * readable. We test the entry for the standard
      * input (file 0). */
-    
+
     if(FD_ISSET(0,&read_fd))
     /* Character pending on stdin */
         return 1;
-    
+
     /* no characters were pending */
     return 0;
 }
@@ -253,59 +254,59 @@ int LoadScript(char * pstrFilename)
     FILE * pScriptFile;
     if (!(pScriptFile = fopen(pstrFilename, "rb")))
         return LOAD_ERROR_FILE_IO;
-    
+
     char * pstrIDString;
     pstrIDString = (char *) malloc (5);
-    
+
     fread(pstrIDString, 4, 1, pScriptFile);
     pstrIDString[strlen(XSE_ID_STRING)] = '\0';
-    
+
     if (strcmp(pstrIDString, XSE_ID_STRING) != 0)
         return LOAD_ERROR_INVALID_XSE;
-    
+
     free(pstrIDString);
-    
+
     int iMajorVersion = 0, iMinorVersion = 0;
     fread(&iMajorVersion, 1, 1, pScriptFile);
     fread(&iMinorVersion, 1, 1, pScriptFile);
-    
+
     if (iMajorVersion != 0 || iMinorVersion != 4)
         return LOAD_ERROR_UNSUPPORTED_VERS;
-    
+
     fread(&g_Script.Stack.iSize, 4, 1, pScriptFile);
-    
+
     if (g_Script.Stack.iSize == 0)
         g_Script.Stack.iSize = DEF_STACK_SIZE;
-    
+
     int iStackSize = g_Script.Stack.iSize;
     g_Script.Stack.pElmnts = (Value *) malloc(iStackSize * sizeof(Value));
-    
+
     fread(&g_Script.iGlobalDataSize, 4, 1, pScriptFile);
     fread(&g_Script.iMainFuncIndex, 4, 1, pScriptFile);
-    
+
     /* Read the instruction stream */
     fread(&g_Script.InstrStream.iSize, 4, 1, pScriptFile);
-    
+
     g_Script.InstrStream.pInstr = (Instr *) malloc(g_Script.InstrStream.iSize * sizeof(Instr));
-    
+
     for (int iCurrInstrIndex = 0; iCurrInstrIndex < g_Script.InstrStream.iSize; ++ iCurrInstrIndex)
     {
         g_Script.InstrStream.pInstr[iCurrInstrIndex].iOpcode = 0;
         fread(&g_Script.InstrStream.pInstr[iCurrInstrIndex].iOpcode, 2, 1, pScriptFile);
-        
+
         g_Script.InstrStream.pInstr[iCurrInstrIndex].iOpCount = 0;
         fread(&g_Script.InstrStream.pInstr[iCurrInstrIndex].iOpCount, 1, 1, pScriptFile);
-        
+
         int iOpCount = g_Script.InstrStream.pInstr[iCurrInstrIndex].iOpCount;
-        
+
         Value * pOpList;
         pOpList = (Value *) malloc(iOpCount * sizeof(Value));
-        
+
         for (int iCurrOpIndex = 0; iCurrOpIndex < iOpCount; ++ iCurrOpIndex)
         {
             pOpList[iCurrOpIndex].iType = 0;
             fread(&pOpList[iCurrOpIndex].iType, 1, 1, pScriptFile);
-            
+
             switch (pOpList[iCurrOpIndex].iType) {
                 case OP_TYPE_INT:
                     fread(&pOpList[iCurrOpIndex].iIntLiteral, sizeof(int), 1, pScriptFile);
@@ -342,33 +343,33 @@ int LoadScript(char * pstrFilename)
         }
         g_Script.InstrStream.pInstr[iCurrInstrIndex].pOpList = pOpList;
     }
-    
+
     /* Read the string table */
     int iStringTableSize;
     fread(&iStringTableSize, 4, 1, pScriptFile);
-    
+
     if (iStringTableSize)
     {
         char ** ppstrStringTable = (char **) malloc(iStringTableSize * sizeof(char *));
-        
+
         for (int iCurrStringIndex = 0; iCurrStringIndex < iStringTableSize; ++ iCurrStringIndex)
         {
             int iStringSize;
             fread(&iStringSize, 4, 1, pScriptFile);
             char * pstrCurrString = (char *) malloc(iStringSize + 1);
-            
+
             fread(pstrCurrString, iStringSize, 1, pScriptFile);
             pstrCurrString[iStringSize] = '\0';
-            
+
             ppstrStringTable[iCurrStringIndex] = pstrCurrString;
         }
-        
+
         /* Run through each operand in the instruction stream and assign copies of string */
         for (int iCurrInstrIndex = 0; iCurrInstrIndex < g_Script.InstrStream.iSize; ++ iCurrInstrIndex)
         {
             int iOpCount = g_Script.InstrStream.pInstr[iCurrInstrIndex].iOpCount;
             Value * pOpList = g_Script.InstrStream.pInstr[iCurrInstrIndex].pOpList;
-            
+
             for (int iCurrOpIndex = 0; iCurrOpIndex < iOpCount; ++ iCurrOpIndex)
             {
                 if (pOpList[iCurrOpIndex].iType == OP_TYPE_STRING)
@@ -380,66 +381,66 @@ int LoadScript(char * pstrFilename)
                 }
             }
         }
-        
+
         /* Free the orginal strings */
         for (int iCurrStringIndex = 0; iCurrStringIndex < iStringTableSize; ++ iCurrStringIndex)
         {
             free(ppstrStringTable[iCurrStringIndex]);
         }
         free(ppstrStringTable);
-        
+
         int iFuncTableSize;
         fread(&iFuncTableSize, 4, 1, pScriptFile);
         g_Script.pFuncTable = (Func *) malloc(iFuncTableSize * sizeof(Func));
-        
+
         for (int iCurrFuncIndex = 0; iCurrFuncIndex < iFuncTableSize; ++ iCurrFuncIndex)
         {
             int iEntryPoint;
             fread(&iEntryPoint, 4, 1, pScriptFile);
-            
+
             int iParamCount = 0;
             fread(&iParamCount, 1, 1, pScriptFile);
-            
+
             int iLocalDataSize;
             fread(&iLocalDataSize, 4, 1, pScriptFile);
-            
+
             int iStackFrameSize = iParamCount + 1 + iLocalDataSize;
-            
+
             g_Script.pFuncTable[iCurrFuncIndex].iEntryPoint = iEntryPoint;
             g_Script.pFuncTable[iCurrFuncIndex].iParamCount = iParamCount;
             g_Script.pFuncTable[iCurrFuncIndex].iLocalDataSize = iLocalDataSize;
             g_Script.pFuncTable[iCurrFuncIndex].iStackFrameSize = iStackFrameSize;
         }
-        
+
         /* Read the host API call table */
-        
+
         fread(&g_Script.HostAPICallTable.iSize, 4, 1, pScriptFile);
         g_Script.HostAPICallTable.ppstrCalls = (char **) malloc(g_Script.HostAPICallTable.iSize * sizeof(char *));
-        
+
         for (int iCurrCallIndex = 0; iCurrCallIndex < g_Script.HostAPICallTable.iSize; ++ iCurrCallIndex)
         {
             int iCallLength = 0;
             fread(&iCallLength, 1, 1, pScriptFile);
-            
+
             char * pstrCurrCall = (char *) malloc(iCallLength + 1);
-            
+
             fread(pstrCurrCall, iCallLength, 1, pScriptFile);
             pstrCurrCall[iCallLength] = '\0';
-            
+
             g_Script.HostAPICallTable.ppstrCalls[iCurrCallIndex] = pstrCurrCall;
         }
-        
+
         fclose ( pScriptFile );
-        
+
         /* Print some information about the script */
-        
+
         printf ( "%s loaded successfully!\n", pstrFilename );
         printf ( "\n" );
         printf ( "  Format Version: %d.%d\n", iMajorVersion, iMinorVersion );
         printf ( "      Stack Size: %d\n", g_Script.Stack.iSize );
         printf ( "Global Data Size: %d\n", g_Script.iGlobalDataSize );
         printf ( "       Functions: %d\n", iFuncTableSize );
-        
+
         printf ( "_Main () Present: " );
         if (g_Script.iIsMainFuncPresent)
         {
@@ -450,15 +451,15 @@ int LoadScript(char * pstrFilename)
             printf ( "No" );
         }
         printf ( "\n" );
-        
+
         printf ( "  Host API Calls: %d\n", g_Script.HostAPICallTable.iSize );
         printf ( "    Instructions: %d\n", g_Script.InstrStream.iSize );
         printf ( " String Literals: %d\n", iStringTableSize );
-        
+
         printf ( "\n" );
-        
+
     }
-    
+
     return LOAD_OK;
 }
 
@@ -466,7 +467,7 @@ int LoadScript(char * pstrFilename)
 void RunScript()
 {
     int iExitExecLoop = false;
-    
+
     while (!kbhit())
     {
         if (g_Script.iIsPaused)
@@ -480,21 +481,21 @@ void RunScript()
                 continue;
             }
         }
-        
+
         int iCurrInstr = g_Script.InstrStream.iCurrInstr;
-        
+
         int iOpcode = g_Script.InstrStream.pInstr[iCurrInstr].iOpcode;
-        
+
         /* Print some info about the instruction */
-        
+
         printf("\t");
-        
+
         if (iOpcode < 10)
             printf(" %d", iOpcode);
         else
             printf("%d", iOpcode);
         printf(" %s ", ppstrMnemonics[iOpcode]);
-        
+
         switch(iOpcode) {
             /* Binary operations */
             case INSTR_MOV:
@@ -512,37 +513,110 @@ void RunScript()
             {
                 Value Dest = ResolveOpValue(0);
                 Value Source = ResolveOpValue(1);
-                
-                switch (iOpcode) {
+
+                switch (iOpcode)
+                {
                     case INSTR_MOV:
                         /* Skip when the two operands are the same */
                         if (ResolveOpPntr(0) == ResolveOpPntr(1))
                             break;
-                        CopyValue(&Dest, Source);
+                        CopyValue( & Dest, Source);
                         break;
-                        
+
                     case INSTR_ADD:
                         if (Dest.iType == OP_TYPE_INT)
                             Dest.iIntLiteral += ResolveOpAsInt(1);
                         else
                             Dest.fFloatLiteral += ResolveOpAsFloat(1);
                         break;
-                    
-                    
-                        
-                    default:
+
+                    case INSTR_SUB:
+                        if (Dest.iType == OP_TYPE_INT)
+                            Dest.iIntLiteral -= ResolveOpAsInt(1);
+                        else
+                            Dest.fFloatLiteral -= ResolveOpAsFloat(1);
+                        break;
+
+                    case INSTR_MUL:
+
+                        if (Dest.iType == OP_TYPE_INT)
+                            Dest.iIntLiteral *= ResolveOpAsInt(1);
+                        else
+                            Dest.fFloatLiteral *= ResolveOpAsFloat(1);
+                        break;
+
+                    case INSTR_DIV:
+
+                        if (Dest.iType == OP_TYPE_INT)
+                            Dest.iIntLiteral /= ResolveOpAsInt(1);
+                        else
+                            Dest.fFloatLiteral /= ResolveOpAsFloat(1);
+
+                        break;
+
+                    case INSTR_MOD:
+
+                        if (Dest.iType == OP_TYPE_INT)
+                            Dest.iIntLiteral %= ResolveOpAsInt(1);
+
+                        break;
+
+                    case INSTR_EXP:
+
+                        if (Dest.iType == OP_TYPE_INT)
+                            Dest.iIntLiteral = (int) pow(Dest.iIntLiteral, ResolveOpAsInt(1));
+                        else
+                            Dest.fFloatLiteral = (float) pow(Dest.fFloatLiteral, ResolveOpAsFloat(1));
+
+                        break;
+
+                    case INSTR_AND:
+
+                        if (Dest.iType == OP_TYPE_INT)
+                            Dest.iIntLiteral &= ResolveOpAsInt(1);
+
+                        break;
+
+                    case INSTR_OR:
+
+                        if (Dest.iType == OP_TYPE_INT)
+                            Dest.iIntLiteral |= ResolveOpAsInt(1);
+
+                        break;
+
+                    case INSTR_XOR:
+
+                        if (Dest.iType == OP_TYPE_INT)
+                            Dest.iIntLiteral ^= ResolveOpAsInt(1);
+
+                        break;
+
+                    case INSTR_SHL:
+
+                        if (Dest.iType == OP_TYPE_INT)
+                            Dest.iIntLiteral <<= ResolveOpAsInt(1);
+
+                        break;
+
+                    case INSTR_SHR:
+
+                        if (Dest.iType == OP_TYPE_INT)
+                            Dest.iIntLiteral >>= ResolveOpAsInt(1);
+
                         break;
                 }
+
+                * ResolveOpPntr(0) = Dest;
             }
-                
+
         }
-        
+
         printf("\n");
-        
+
         /* If the instruction pointer hasn't been changed by an instruction.*/
         if (iCurrInstr == g_Script.InstrStream.iCurrInstr)
             ++ g_Script.InstrStream.iCurrInstr;
-        
+
         if (iExitExecLoop)
             break;
     }
@@ -552,7 +626,7 @@ void RunScript()
 void ResetScript()
 {
     int iMainFuncIndex = g_Script.iMainFuncIndex;
-    
+
     /* If the function table is present, set the entry point */
     if (g_Script.pFuncTable)
     {
@@ -561,25 +635,25 @@ void ResetScript()
             g_Script.InstrStream.iCurrInstr = g_Script.pFuncTable[iMainFuncIndex].iEntryPoint;
         }
     }
-    
+
     /* Clear the stack */
     for (int iCurrElmntIndex = 0; iCurrElmntIndex < g_Script.Stack.iSize; ++ iCurrElmntIndex)
     {
         g_Script.Stack.pElmnts[iCurrElmntIndex].iType = OP_TYPE_NULL;
     }
-    
+
     /* Unpause the script */
     g_Script.iIsPaused = false;
-    
+
     /* Allocate space for the globals */
     PushFrame(g_Script.iGlobalDataSize);
-    
+
     /* If _Main() is present, push it's stack frame (plus one extra stack element to
      * compensate for the function index that usually sits on top of stack frames and
      * causes indeices to start from -2)
      */
     PushFrame(g_Script.pFuncTable[iMainFuncIndex].iStackFrameSize + 1);
-    
+
 }
 
 /* Coerces a Value structure from it's current type to a string value. */
@@ -588,7 +662,7 @@ char * CoerceValueToString(Value Val)
     char * pstrCoercion;
     if (Val.iType != OP_TYPE_STRING)
         pstrCoercion = (char *) malloc(MAX_COERCION_STRING_SIZE + 1);
-    
+
     switch (Val.iType) {
         case OP_TYPE_INT:
             sprintf(pstrCoercion, "%d", Val.iIntLiteral);
@@ -636,7 +710,7 @@ float CoerceValueToFloat(Value Val)
 int GetOpType(int iOpIndex)
 {
     int iCurrInstr = g_Script.InstrStream.iCurrInstr;
-    
+
     return g_Script.InstrStream.pInstr[iCurrInstr].pOpList[iOpIndex].iType;
 }
 
@@ -670,7 +744,7 @@ char * ResolveOpAsString(int iOpIndex)
     return pstrString;
 }
 
-int ResloveOpStackIndex(int iOpIndex)
+int ResolveOpStackIndex(int iOpIndex)
 {
     return 0;
 }
@@ -679,15 +753,15 @@ int ResloveOpStackIndex(int iOpIndex)
 Value * ResolveOpPntr(int iOpIndex)
 {
     int iIndirMethod = GetOpType(iOpIndex);
-    
+
     switch (iIndirMethod) {
         case OP_TYPE_REG:
             return &g_Script._RetVal;
         case OP_TYPE_ABS_STACK_INDEX:
         case OP_TYPE_REL_STACK_INDEX:
         {
-            int iStackIndex = ResloveOpStackIndex(iOpIndex);
-            return &g_Script.Stack.pElmnts[ResloveOpStackIndex(iStackIndex)];
+            int iStackIndex = ResolveOpStackIndex(iOpIndex);
+            return &g_Script.Stack.pElmnts[ResolveOpStackIndex(iStackIndex)];
         }
         default:
             return NULL;
@@ -699,12 +773,12 @@ Value ResolveOpValue(int iOpIndex)
 {
     int iCurrInstr = g_Script.InstrStream.iCurrInstr;
     Value OpValue = g_Script.InstrStream.pInstr[iCurrInstr].pOpList[iOpIndex];
-    
+
     switch (OpValue.iType) {
         case OP_TYPE_ABS_STACK_INDEX:
         case OP_TYPE_REL_STACK_INDEX:
         {
-            int iAbsIndex = ResloveOpStackIndex(iOpIndex);
+            int iAbsIndex = ResolveOpStackIndex(iOpIndex);
             return GetStackValue(iAbsIndex);
         }
         case OP_TYPE_REG:
@@ -758,22 +832,73 @@ void CopyValue(Value * pDest, Value Source)
     {
         free(pDest->pstrStringLiteral);
     }
-    
+
     /* Copyt the objext */
     * pDest = Source;
-    
+
     if (Source.iType == OP_TYPE_STRING)
     {
         pDest->pstrStringLiteral = (char *) malloc(strlen(Source.pstrStringLiteral) + 1);
         strcpy(pDest->pstrStringLiteral, Source.pstrStringLiteral);
     }
-        
+
 }
 
 /* Returns the function corresponding to the specified index. */
 Func GetFunc(int iIndex)
 {
     return g_Script.pFuncTable[iIndex];
+}
+
+void PrintOpIndir(int iOpIndex)
+{
+    int iIndirMethod = GetOpType(iOpIndex);
+    switch (iIndirMethod) {
+        case OP_TYPE_REG:
+            printf("_RetVal");
+            break;
+
+        case OP_TYPE_ABS_STACK_INDEX:
+        case OP_TYPE_REL_STACK_INDEX:
+        {
+            int iStackIndex = ResolveOpStackIndex(iOpIndex);
+            printf("[%d]", iStackIndex);
+            break;
+        }
+    }
+}
+
+void PrintOpValue(int iOpIndex)
+{
+    Value Op = ResolveOpValue(iOpIndex);
+    switch (Op.iType) {
+        case OP_TYPE_NULL:
+            printf ( "Null" );
+            break;
+
+        case OP_TYPE_INT:
+            printf ( "%d", Op.iIntLiteral );
+            break;
+
+        case OP_TYPE_FLOAT:
+            printf ( "%f", Op.fFloatLiteral );
+            break;
+
+        case OP_TYPE_STRING:
+            printf ( "%s", Op.pstrStringLiteral );
+            break;
+
+        case OP_TYPE_INSTR_INDEX:
+            printf ( "%d", Op.iInstrIndex );
+            break;
+
+        case OP_TYPE_HOST_API_CALL_INDEX:
+        {
+            char * pstrHostAPICall = ResolveOpAsHostAPICall ( iOpIndex );
+            printf ( "%s", pstrHostAPICall );
+            break;
+        }
+    }
 }
 
 /* Returns the host API call corresponding to the specified index. */
@@ -785,6 +910,7 @@ char * GetHostAPICall(int iIndex)
 int GetCurrTime()
 {
     return (int) time(0);
+
 }
 
 int main()
