@@ -236,14 +236,14 @@ typedef struct _Op
     int iType;                      // Type
     union
     {
-	int iIntLiteral;            // Integer literal
-	float fFloatLiteral;         // Float literal
-	int iStringTableIndex;         // String table index
-	int iStackIndex;            // Stack index
-	int iInstrIndex;            // Instruction index
-	int iFuncIndex;             // Function index
-	int iHostAPICallIndex;         // Host API call index
-	int iReg;                   // Register code
+        int iIntLiteral;        // Integer literal
+        float fFloatLiteral;     // Float literal
+        int iStringTableIndex;     // String table index
+        int iStackIndex;        // Stack index
+        int iInstrIndex;        // Instruction index
+        int iFuncIndex;         // Function index
+        int iHostAPICallIndex;     // Host API call index
+        int iReg;               // Register code
     };
     int iOffsetIndex;               // Index of the offset
 }
