@@ -55,7 +55,7 @@
 #define TOKEN_TYPE_CLOSE_BRACE      10          // An closing curly brace
 #define TOKEN_TYPE_NEWLINE          11          // A newline
 
-#define TOKEN_TYPE_INSTR			12			// An instruction
+#define TOKEN_TYPE_INSTR      12      // An instruction
 
 #define TOKEN_TYPE_SETSTACKSIZE     13          // The SetStackSize directive
 #define TOKEN_TYPE_VAR              14          // The Var/Var [] directives
@@ -149,83 +149,83 @@
 
 // ---- Functions -------------------------------------------------------------------------
 
-#define MAIN_FUNC_NAME				"_MAIN"		// _Main ()'s name
+#define MAIN_FUNC_NAME        "_MAIN"   // _Main ()'s name
 
 // ---- Error Strings ---------------------------------------------------------------------
 
 // The following macros are used to represent assembly-time error strings
 
-#define ERROR_MSSG_INVALID_INPUT	\
-"Invalid input"
+#define ERROR_MSSG_INVALID_INPUT  \
+    "Invalid input"
 
 #define ERROR_MSSG_INVALID_FILE     \
-"Could not open executable file for output"
+    "Could not open executable file for output"
 
-#define ERROR_MSSG_LOCAL_SETSTACKSIZE	\
-"SetStackSize can only appear in the global scope"
+#define ERROR_MSSG_LOCAL_SETSTACKSIZE \
+    "SetStackSize can only appear in the global scope"
 
-#define ERROR_MSSG_INVALID_STACK_SIZE	\
-"Invalid stack size"
+#define ERROR_MSSG_INVALID_STACK_SIZE \
+    "Invalid stack size"
 
-#define ERROR_MSSG_MULTIPLE_SETSTACKSIZES	\
-"Multiple instances of SetStackSize illegal"
+#define ERROR_MSSG_MULTIPLE_SETSTACKSIZES \
+    "Multiple instances of SetStackSize illegal"
 
-#define ERROR_MSSG_IDENT_EXPECTED	\
-"Identifier expected"
+#define ERROR_MSSG_IDENT_EXPECTED \
+    "Identifier expected"
 
-#define ERROR_MSSG_INVALID_ARRAY_SIZE	\
-"Invalid array size"
+#define ERROR_MSSG_INVALID_ARRAY_SIZE \
+    "Invalid array size"
 
-#define ERROR_MSSG_IDENT_REDEFINITION	\
-"Identifier redefinition"
+#define ERROR_MSSG_IDENT_REDEFINITION \
+    "Identifier redefinition"
 
-#define ERROR_MSSG_UNDEFINED_IDENT	\
-"Undefined identifier"
+#define ERROR_MSSG_UNDEFINED_IDENT  \
+    "Undefined identifier"
 
-#define ERROR_MSSG_NESTED_FUNC	\
-"Nested functions illegal"
+#define ERROR_MSSG_NESTED_FUNC  \
+    "Nested functions illegal"
 
-#define ERROR_MSSG_FUNC_REDEFINITION	\
-"Function redefinition"
+#define ERROR_MSSG_FUNC_REDEFINITION  \
+    "Function redefinition"
 
-#define ERROR_MSSG_UNDEFINED_FUNC	\
-"Undefined function"
+#define ERROR_MSSG_UNDEFINED_FUNC \
+    "Undefined function"
 
-#define ERROR_MSSG_GLOBAL_PARAM	\
-"Parameters can only appear inside functions"
+#define ERROR_MSSG_GLOBAL_PARAM \
+    "Parameters can only appear inside functions"
 
-#define ERROR_MSSG_MAIN_PARAM	\
-"_Main () function cannot accept parameters"
+#define ERROR_MSSG_MAIN_PARAM \
+    "_Main () function cannot accept parameters"
 
-#define ERROR_MSSG_GLOBAL_LINE_LABEL	\
-"Line labels can only appear inside functions"
+#define ERROR_MSSG_GLOBAL_LINE_LABEL  \
+    "Line labels can only appear inside functions"
 
-#define ERROR_MSSG_LINE_LABEL_REDEFINITION	\
-"Line label redefinition"
+#define ERROR_MSSG_LINE_LABEL_REDEFINITION  \
+    "Line label redefinition"
 
-#define ERROR_MSSG_UNDEFINED_LINE_LABEL	\
-"Undefined line label"
+#define ERROR_MSSG_UNDEFINED_LINE_LABEL \
+    "Undefined line label"
 
-#define ERROR_MSSG_GLOBAL_INSTR	\
-"Instructions can only appear inside functions"
+#define ERROR_MSSG_GLOBAL_INSTR \
+    "Instructions can only appear inside functions"
 
-#define ERROR_MSSG_INVALID_INSTR	\
-"Invalid instruction"
+#define ERROR_MSSG_INVALID_INSTR  \
+    "Invalid instruction"
 
-#define ERROR_MSSG_INVALID_OP	\
-"Invalid operand"
+#define ERROR_MSSG_INVALID_OP \
+    "Invalid operand"
 
-#define ERROR_MSSG_INVALID_STRING	\
-"Invalid string"
+#define ERROR_MSSG_INVALID_STRING \
+    "Invalid string"
 
-#define ERROR_MSSG_INVALID_ARRAY_NOT_INDEXED	\
-"Arrays must be indexed"
+#define ERROR_MSSG_INVALID_ARRAY_NOT_INDEXED  \
+    "Arrays must be indexed"
 
-#define ERROR_MSSG_INVALID_ARRAY	\
-"Invalid array"
+#define ERROR_MSSG_INVALID_ARRAY  \
+    "Invalid array"
 
-#define ERROR_MSSG_INVALID_ARRAY_INDEX	\
-"Invalid array index"
+#define ERROR_MSSG_INVALID_ARRAY_INDEX  \
+    "Invalid array index"
 
 
 
@@ -236,14 +236,14 @@ typedef struct _Op
     int iType;                      // Type
     union
     {
-        int iIntLiteral;            // Integer literal
-        float fFloatLiteral;        // Float literal
-        int iStringTableIndex;      // String table index
-        int iStackIndex;            // Stack index
-        int iInstrIndex;            // Instruction index
-        int iFuncIndex;             // Function index
-        int iHostAPICallIndex;      // Host API call index
-        int iReg;                   // Register code
+	int iIntLiteral;            // Integer literal
+	float fFloatLiteral;         // Float literal
+	int iStringTableIndex;         // String table index
+	int iStackIndex;            // Stack index
+	int iInstrIndex;            // Instruction index
+	int iFuncIndex;             // Function index
+	int iHostAPICallIndex;         // Host API call index
+	int iReg;                   // Register code
     };
     int iOffsetIndex;               // Index of the offset
 }
@@ -278,7 +278,7 @@ LinkedListNode;
 typedef struct _LinkedList
 {
     LinkedListNode *pHead,
-    *pTail;
+                   *pTail;
     int iNodeCount;
 }
 LinkedList;
@@ -328,13 +328,13 @@ typedef int Token;
 typedef struct _Lexer
 {
     int iCurrSourceLine;                            // Current line in the source
-    
+
     unsigned int iIndex0,                           // Indices into the string
-    iIndex1;
-    
+                 iIndex1;
+
     Token CurrToken;                                // Current token
     char pstrCurrLexeme [ MAX_LEXEME_SIZE ];        // Current lexeme
-    
+
     int iCurrLexState;                              // The current lex state
 }
 Lexer;
