@@ -199,7 +199,8 @@ Value GetStackValue(int);
 int ResolveOpAsInt(int);
 float ResolveOpAsFloat(int);
 char * ResolveOpAsString(int);
-int ResolveOpAsInstrIndex(int)
+int ResolveOpAsInstrIndex(int);
+int ResolveOpAsFuncIndex(int);
 char * CoerceValueToString(Value);
 Value GetStackValue(int);
 void SetStackValue(int, Value);
@@ -207,6 +208,7 @@ void Push(Value);
 Value Pop();
 void PushFrame(int);
 void PopFrame(int);
+Func GetFunc(int);
 void CopyValue(Value *, Value);
 Value * ResolveOpPntr(int);
 void Runscript();
@@ -610,7 +612,7 @@ void RunScript()
                         break;
                 }
 
-                *ResolveOpPntr(0) = Dest; ©
+                *ResolveOpPntr(0) = Dest;
 
                     PrintOpIndir(0);
                 printf(", ");
@@ -756,14 +758,189 @@ void RunScript()
                 PrintOpValue (2);
                 break;
             }
+                
+            /* Conditional braching */
+            case INSTR_JMP:
+            {
+                int iTargetIndex = ResolveOpAsInstrIndex(0);
+                g_Script.InstrStream.iCurrInstr = iTargetIndex;
+                
+                PrintOpValue(0);
+                break;
+            }
+            
+            case INSTR_JE:
+            case INSTR_JNE:
+            case INSTR_JG:
+            case INSTR_JL:
+            case INSTR_JGE:
+            case INSTR_JLE:
+            {
+                Value Op0 = ResolveOpValue(0);
+                Value Op1 = ResolveOpValue(1);
+                
+                int iTargetIndex = ResolveOpAsInstrIndex(2);
+                
+                int iJump = false;
+                
+                switch (iOpcode) {
+                    case INSTR_JE:
+                    {
+                        switch (Op0.iType) {
+                            case OP_TYPE_INT:
+                                if (Op0.iIntLiteral == Op1.iIntLiteral)
+                                    iJump = true;
+                                break;
+                            
+                            case OP_TYPE_FLOAT:
+                                if (Op0.fFloatLiteral == Op1.fFloatLiteral)
+                                    iJump = true;
+                                break;
+                                
+                            case OP_TYPE_STRING:
+                                if (strcmp(Op0.pstrStringLiteral, Op1.pstrStringLiteral) == 0)
+                                    iJump = true;
+                                break;
+                        }
+                        break;
+                    }
+                    
+                    case INSTR_JNE:
+                    {
+                        switch (Op0.iType) {
+                            case OP_TYPE_INT:
+                                if (Op0.iIntLiteral != Op1.iIntLiteral)
+                                    iJump = true;
+                                break;
+                                
+                            case OP_TYPE_FLOAT:
+                                if (Op0.fFloatLiteral != Op1.fFloatLiteral)
+                                    iJump = true;
+                                break;
+                                
+                            case OP_TYPE_STRING:
+                                if (strcmp(Op0.pstrStringLiteral, Op1.pstrStringLiteral) != 0)
+                                    iJump = true;
+                                break;
+                        }
+                        break;
+                    }
+                        
+                    case INSTR_JG:
+                    {
+                        if (Op0.iType == OP_TYPE_INT)
+                        {
+                            if (Op0.iIntLiteral > Op1.iIntLiteral)
+                                iJump = true;
+                        }
+                        else
+                        {
+                            if (Op0.fFloatLiteral > Op1.fFloatLiteral)
+                                iJump = true;
+                        }
+                        break;
+                    }
+                        
+                    case INSTR_JL:
+                    {
+                        if (Op0.iType == OP_TYPE_INT)
+                        {
+                            if (Op0.iIntLiteral < Op1.iIntLiteral)
+                                iJump = true;
+                        }
+                        else
+                        {
+                            if (Op0.fFloatLiteral < Op1.fFloatLiteral)
+                                iJump = true;
+                        }
+                        break;
+                    }
+                        
+                    case INSTR_JGE:
+                    {
+                        if (Op0.iType == OP_TYPE_INT)
+                        {
+                            if (Op0.iIntLiteral >= Op1.iIntLiteral)
+                                iJump = true;
+                        }
+                        else
+                        {
+                            if (Op0.fFloatLiteral >= Op1.fFloatLiteral)
+                                iJump = true;
+                        }
+                        break;
+                    }
+                    
+                    case INSTR_JLE:
+                    {
+                        if (Op0.iType == OP_TYPE_INT)
+                        {
+                            if (Op0.iIntLiteral <= Op1.iIntLiteral)
+                                iJump = true;
+                        }
+                        else
+                        {
+                            if (Op0.fFloatLiteral <= Op1.fFloatLiteral)
+                                iJump = true;
+                        }
+                        break;
+                    }
+                }
+                PrintOpValue(0);
+                printf(", ");
+                PrintOpValue(1);
+                printf(", ");
+                PrintOpValue(2);
+                printf(" ");
+                
+                if (iJump)
+                {
+                    g_Script.InstrStream.iCurrInstr = iTargetIndex;
+                    printf("(True)");
+                }
+                else
+                {
+                    printf("(False)");
+                }
+                break;
+            }
+            
+            /* Stack interface */
+            
+            case INSTR_PUSH:
+            {
+                Value Source = ResolveOpValue(0);
+                Push(Source);
+                
+                PrintOpValue(0);
+                break;
+            }
+                
+            case INSTR_POP:
+            {
+                * ResolveOpPntr(0) = Pop();
+                
+                PrintOpIndir(0);
+                break;
+            }
+                
+            case INSTR_CALL:
+            {
+                int iFuncIndex = ResolveOpAsFuncIndex(0);
+                Func Dest = GetFunc(iFuncIndex);
+                
+                Value ReturnAddr;
+                ReturnAddr.iInstrIndex = g_Script.InstrStream.iCurrInstr + 1;
+                Push(ReturnAddr);
+                /*
+                 * Push the stack frame + 1 (the extra space is for the function index)
+                 * we will put on the stack after it
+                 */
+                PushFrame(Dest.iLocalDataSize + 1);
+            }
+                
+            
         }
-
-        /* Conditional braching */
-        case INSTR_JMP:
-        {
-            int iTargetIndex = Resolveopa
-        }
-
             printf("\n");
 
             /* If the instruction pointer hasn't been changed by an instruction.*/
@@ -889,7 +1066,10 @@ float ResolveOpAsFloat(int iOpIndex)
     float fFloat = CoerceValueToFloat(OpValue);
     return fFloat;
 }
-
+/*
+ *	Resolves and coerces an operand's value to a string value, allocating the space for a
+ *  new string if necessary.
+ */
 char * ResolveOpAsString(int iOpIndex)
 {
     Value OpValue = ResolveOpValue(iOpIndex);
@@ -951,6 +1131,13 @@ Value ResolveOpValue(int iOpIndex)
 int ResolveOpAsInstrIndex(int iOpIndex)
 {
     return 0;
+}
+
+/* Resolves an operand as a function index */
+int ResolveOpAsFuncIndex(int iOpIndex)
+{
+    Value OpValue = ResolveOpValue(iOpIndex);
+    return OpValue.iFuncIndex;
 }
 
 Value GetStackValue(int iIndex)
@@ -1015,6 +1202,7 @@ Func GetFunc(int iIndex)
     return g_Script.pFuncTable[iIndex];
 }
 
+/* Prints an operand's of indirection */
 void PrintOpIndir(int iOpIndex)
 {
     int iIndirMethod = GetOpType(iOpIndex);
