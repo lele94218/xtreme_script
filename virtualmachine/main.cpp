@@ -937,6 +937,18 @@ void RunScript()
                  * we will put on the stack after it
                  */
                 PushFrame(Dest.iLocalDataSize + 1);
+                
+                /* Write the function index to the top of the stack */
+                
+                Value FuncIndex;
+                FuncIndex.iFuncIndex = iFuncIndex;
+                SetStackValue(g_Script.Stack.iTopIndex - 1, FuncIndex);
+                
+                /* Make the jump to the function's entry point */
+                g_Script.InstrStream.iCurrInstr = Dest.iEntryPoint;
+                printf("$$[%d]$$", g_Script.InstrStream.iCurrInstr);
+                printf("%d (Entry Point: %d, Frame Size %d)", iFuncIndex, Dest.iEntryPoint, Dest.iStackFrameSize);
+                
             }
                 
             
