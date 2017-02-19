@@ -100,6 +100,7 @@ typedef struct _Value
         int iHostAPICallIndex;
         int iReg;
     };
+    /* Index of the offset */
     int iOffsetIndex;
 }
 Value;
@@ -189,6 +190,7 @@ char ppstrMnemonics [][12] =
 
 /* ------------------------------ Function declarations ------------------------------ */
 int kbhit();
+void ShutDown();
 int LoadScript(char *);
 int GetOpType(int);
 int ResolveOpType(int);
@@ -253,6 +255,48 @@ int kbhit()
 
     /* no characters were pending */
     return 0;
+}
+
+void ShutDown()
+{
+    /* Free instruction stream */
+    for (int iCurrInstrIndex = 0; iCurrInstrIndex < g_Script.InstrStream.iSize; ++ iCurrInstrIndex)
+    {
+        int iOpCount = g_Script.InstrStream.pInstr[iCurrInstrIndex].iOpCount;
+        Value * pOpList = g_Script.InstrStream.pInstr[iCurrInstrIndex].pOpList;
+        
+        for (int iCurrOpIndex = 0; iCurrOpIndex < iOpCount; ++ iCurrOpIndex)
+        {
+            if (pOpList[iCurrOpIndex].pstrStringLiteral)
+                free(pOpList[iCurrOpIndex].pstrStringLiteral);
+        }
+        
+        if (g_Script.InstrStream.pInstr)
+            free(g_Script.InstrStream.pInstr);
+    }
+    
+    for (int iCurrElmtnIndex = 0; iCurrElmtnIndex < g_Script.Stack.iSize; ++ iCurrElmtnIndex)
+    {
+        if (g_Script.Stack.pElmnts[iCurrElmtnIndex].iType == OP_TYPE_STRING)
+        {
+            free(g_Script.Stack.pElmnts[iCurrElmtnIndex].pstrStringLiteral);
+        }
+    }
+    
+    if (g_Script.Stack.pElmnts)
+        free(g_Script.Stack.pElmnts);
+    
+    if (g_Script.pFuncTable)
+        free(g_Script.pFuncTable);
+    
+    for (int iCurrCallIndex = 0; iCurrCallIndex < g_Script.HostAPICallTable.iSize; ++ iCurrCallIndex)
+    {
+        if (g_Script.HostAPICallTable.ppstrCalls[iCurrCallIndex])
+            free(g_Script.HostAPICallTable.ppstrCalls[iCurrCallIndex]);
+    }
+    
+    if (g_Script.HostAPICallTable.ppstrCalls)
+        free(g_Script.HostAPICallTable.ppstrCalls);
 }
 
 int LoadScript(char * pstrFilename)
@@ -666,8 +710,8 @@ void RunScript()
                         break;
                 }
 
-                *ResolveOpPntr (0) = Dest;
-                PrintOpIndir (0);
+                *ResolveOpPntr(0) = Dest;
+                PrintOpIndir(0);
                 break;
             }
 
@@ -680,7 +724,7 @@ void RunScript()
                 if (Dest.iType != OP_TYPE_STRING)
                     break;
 
-                int iNewStringLength = strlen(Dest.pstrStringLiteral) + strlen(pstrSourceString);
+                int iNewStringLength = (int) strlen(Dest.pstrStringLiteral) +  (int) strlen(pstrSourceString);
                 char * pstrNewString = (char *) malloc (iNewStringLength + 1);
 
                 strcpy(pstrNewString, Dest.pstrStringLiteral);
@@ -948,7 +992,73 @@ void RunScript()
                 g_Script.InstrStream.iCurrInstr = Dest.iEntryPoint;
                 printf("$$[%d]$$", g_Script.InstrStream.iCurrInstr);
                 printf("%d (Entry Point: %d, Frame Size %d)", iFuncIndex, Dest.iEntryPoint, Dest.iStackFrameSize);
+                break;
+            }
+            
+            case INSTR_RET:
+            {
+                /* 
+                  * Get the current function index off the top of the stack and
+                  * use it to get the corresponding function structure
+                  */
+                Value FuncIndex = Pop();
+                Func CurrFunc = GetFunc(FuncIndex.iFuncIndex);
+                int iFrameIndex = FuncIndex.iOffsetIndex;
                 
+                /*
+                  * Read the return address structure from the stack, which is
+                  * stored one index below the local data
+                  */
+                Value ReturnAddr = GetStackValue(g_Script.Stack.iTopIndex - (CurrFunc.iLocalDataSize + 1));
+                
+                /* Pop the stack frame along with the return address */
+                PopFrame(CurrFunc.iStackFrameSize);
+                
+                /* Restore the previous frame index */
+                g_Script.Stack.iFrameIndex = iFrameIndex;
+                
+                /* Jump to the return address */
+                g_Script.InstrStream.iCurrInstr = ReturnAddr.iInstrIndex;
+                
+                printf("%d", ReturnAddr.iInstrIndex);
+                break;
+            }
+                
+            case INSTR_CALLHOST:
+            {
+                /* TODO */
+                PrintOpValue(0);
+                break;
+            }
+                
+            case INSTR_PAUSE:
+            {
+                if (g_Script.iIsPaused)
+                    break;
+                
+                /* Get the pause duration */
+                int iPauseDuration = ResolveOpAsInt(0);
+                
+                /* Determine the ending pause time */
+                g_Script.iPauseEndTime = GetCurrTime() + iPauseDuration;
+                
+                /* Pause the script */
+                g_Script.iIsPaused = true;
+                
+                PrintOpValue(0);
+                break;
+            }
+                
+            case INSTR_EXIT:
+            {
+                Value ExitCode = ResolveOpValue(0);
+                
+                int iExitCode = ExitCode.iIntLiteral;
+                
+                iExitExecLoop = true;
+                
+                PrintOpValue(0);
+                break;
             }
                 
             
