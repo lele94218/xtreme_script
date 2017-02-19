@@ -14,21 +14,21 @@
 #include <sys/select.h>
 
 /* File I/O */
-#define EXEC_FILE_EXT       ".XSE"
+#define EXEC_FILE_EXT               ".XSE"
 #define XSE_ID_STRING               "XSE0"
 
 /* LoadScript () Error Codes */
 
-#define LOAD_OK           0
-#define LOAD_ERROR_FILE_IO        1
-#define LOAD_ERROR_INVALID_XSE    2
+#define LOAD_OK                     0
+#define LOAD_ERROR_FILE_IO          1
+#define LOAD_ERROR_INVALID_XSE      2
 #define LOAD_ERROR_UNSUPPORTED_VERS 3
 
 /* Operand Types */
 #define OP_TYPE_NULL                -1          // Uninitialized/Null data
 #define OP_TYPE_INT                 0           // Integer literal value
 #define OP_TYPE_FLOAT               1           // Floating-point literal value
-#define OP_TYPE_STRING            2           // String literal value
+#define OP_TYPE_STRING              2           // String literal value
 #define OP_TYPE_ABS_STACK_INDEX     3           // Absolute array index
 #define OP_TYPE_REL_STACK_INDEX     4           // Relative array index
 #define OP_TYPE_INSTR_INDEX         5           // Instruction index
@@ -79,7 +79,7 @@
 #define INSTR_EXIT                  32
 
 
-#define DEF_STACK_SIZE          1024      // The default stack size
+#define DEF_STACK_SIZE              1024      // The default stack size
 
 #define MAX_COERCION_STRING_SIZE    65          // The maximum allocated
 
@@ -217,6 +217,7 @@ void Runscript();
 int GetCurrTime();
 void PrintOpIndir(int);
 void PrintOpValue(int);
+char * GetHostAPICall(int);
 
 /* ------------------------------------- Macros -------------------------------------- */
 
@@ -1201,13 +1202,33 @@ char * ResolveOpAsString(int iOpIndex)
 
 int ResolveOpStackIndex(int iOpIndex)
 {
-    return 0;
+    int iCurrInstr = g_Script.InstrStream.iCurrInstr;
+    Value OpValue = g_Script.InstrStream.pInstr[iCurrInstr].pOpList[iOpIndex];
+    switch (OpValue.iType) {
+        case OP_TYPE_ABS_STACK_INDEX:
+        {
+            return OpValue.iStackIndex;
+        }
+            
+        case OP_TYPE_REL_STACK_INDEX:
+        {
+            int iBaseIndex = OpValue.iStackIndex;
+            int iOffsetIndex = OpValue.iOffsetIndex;
+            Value StackValue = GetStackValue(iOffsetIndex);
+            return iBaseIndex + StackValue.iIntLiteral;
+        }
+            
+        default:
+            return 0;
+    }
 }
 
 /* Resolves an operand as a host API call */
 char * ResolveOpAsHostAPICall(int iOpIndex)
 {
-    return NULL;
+    Value OpValue = ResolveOpValue(iOpIndex);
+    int iHostAPICallIndex = OpValue.iHostAPICallIndex;
+    return GetHostAPICall(iHostAPICallIndex);
 }
 
 /* Resolves an operand and returns a pointer to it's Value structure */
@@ -1252,7 +1273,8 @@ Value ResolveOpValue(int iOpIndex)
 /* Resolves an operand as an instruction index */
 int ResolveOpAsInstrIndex(int iOpIndex)
 {
-    return 0;
+    Value OpValue = ResolveOpValue(iOpIndex);
+    return OpValue.iInstrIndex;
 }
 
 /* Resolves an operand as a function index */
