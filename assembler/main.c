@@ -14,18 +14,20 @@
 #include <ctype.h>
 #include "main.h"
 
+#define TRUE 1
+#define FALSE 0
 
 // ---- Functions ----
 void AssmblSourceFile ()
 {
     g_ScriptHeader.iStackSize = 0;
-    g_ScriptHeader.iIsMainFuncPresent = false;
+    g_ScriptHeader.iIsMainFuncPresent = FALSE;
 
     g_iInstrStreamSize = 0;
-    g_iIsSetStackSizeFound = false;
+    g_iIsSetStackSizeFound = FALSE;
     g_ScriptHeader.iGlobalDataSize = 0;
 
-    int iIsFuncActive = false;
+    int iIsFuncActive = FALSE;
     FuncNode * pCurrFunc = NULL;
     int iCurrFuncIndex = 0;
     char pstrCurrFuncName[MAX_IDENT_SIZE];
@@ -36,7 +38,7 @@ void AssmblSourceFile ()
 
     ResetLexer();
 
-    while (true)
+    while (TRUE)
     {
         if (GetNextToken () == END_OF_TOKEN_STREAM)
             break;
@@ -56,7 +58,7 @@ void AssmblSourceFile ()
 
                 g_ScriptHeader.iStackSize = atoi (GetCurrLexeme ());
 
-                g_iIsSetStackSizeFound = true;
+                g_iIsSetStackSizeFound = TRUE;
 
                 break;
             }
@@ -127,11 +129,11 @@ void AssmblSourceFile ()
 
                 if (strcmp (pstrFuncName, MAIN_FUNC_NAME) == 0)
                 {
-                    g_ScriptHeader.iIsMainFuncPresent = true;
+                    g_ScriptHeader.iIsMainFuncPresent = TRUE;
                     g_ScriptHeader.iMainFuncIndex = iFuncIndex;
                 }
 
-                iIsFuncActive = true;
+                iIsFuncActive = TRUE;
                 strcpy (pstrCurrFuncName, pstrFuncName);
                 iCurrFuncIndex = iFuncIndex;
                 iCurrFuncParamCount = 0;
@@ -155,7 +157,7 @@ void AssmblSourceFile ()
                 SetFuncInfo (pstrCurrFuncName, iCurrFuncParamCount,
                              iCurrFuncLocalDataSize);
 
-                iIsFuncActive = false;
+                iIsFuncActive = FALSE;
                 break;
             }
 
@@ -228,7 +230,7 @@ void AssmblSourceFile ()
 
     ResetLexer();
 
-    while (true)
+    while (TRUE)
     {
         if (GetNextToken() == END_OF_TOKEN_STREAM)
             break;
@@ -240,7 +242,7 @@ void AssmblSourceFile ()
 
                 pCurrFunc = GetFuncByName(GetCurrLexeme());
 
-                iIsFuncActive = true;
+                iIsFuncActive = TRUE;
 
                 iCurrFuncParamCount = 0;
 
@@ -253,7 +255,7 @@ void AssmblSourceFile ()
 
             case TOKEN_TYPE_CLOSE_BRACE:
             {
-                iIsFuncActive = false;
+                iIsFuncActive = FALSE;
                 if (strcmp(pCurrFunc->pstrName, MAIN_FUNC_NAME) == 0)
                 {
                     g_pInstrStream[g_iCurrInstrIndex].iOpcode = INSTR_EXIT;
@@ -718,7 +720,7 @@ void FreeLinkedList ( LinkedList * pList )
 
         pCurrNode = pList->pHead;
 
-        while ( true )
+        while ( TRUE )
         {
             pNextNode = pCurrNode->pNext;
 
@@ -913,7 +915,7 @@ LabelNode * GetLabelByIndex ( char * pstrIdent, int iFuncIndex )
     return NULL;
 }
 
-int AddInstrLookup ( const char * pstrMnemonic, int iOpcode, int iOpCount )
+int AddInstrLookup ( char * pstrMnemonic, int iOpcode, int iOpCount )
 {
     static int iInstrIndex = 0;
 
@@ -946,11 +948,11 @@ int GetInstrByMnemonic ( char * pstrMnemonic, InstrLookup * pInstr )
         if (strlen(pstrMnemonic) > 0 && strcmp ( g_InstrTable [ iCurrInstrIndex ].pstrMnemonic, pstrMnemonic ) == 0 )
         {
             *pInstr = g_InstrTable [ iCurrInstrIndex ];
-            return true;
+            return TRUE;
         }
     }
 
-    return false;
+    return FALSE;
 }
 
 int SkipToNextLine ()
@@ -958,14 +960,14 @@ int SkipToNextLine ()
     ++g_Lexer.iCurrSourceLine;
 
     if (g_Lexer.iCurrSourceLine >= g_iSourceCodeSize)
-        return false;
+        return FALSE;
 
     g_Lexer.iIndex0 = 0;
     g_Lexer.iIndex1 = 0;
 
     g_Lexer.iCurrLexState = LEX_STATE_NO_STRING;
 
-    return true;
+    return TRUE;
 }
 
 void ResetLexer ()
@@ -987,7 +989,7 @@ char GetLookAheadChar ()
 
     if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
     {
-        while (true)
+        while (TRUE)
         {
             if (iIndex >= strlen (g_ppstrSourceCode[iCurrSourceLine]))
             {
@@ -1047,17 +1049,17 @@ void StripComments (char * pstrSourceLine)
 int IsCharWhitespace (char cChar)
 {
     if (cChar == ' ' || cChar == '\t')
-        return true;
+        return TRUE;
     else
-        return false;
+        return FALSE;
 }
 
 int IsCharNumeric (char cChar)
 {
     if (cChar >= '0' && cChar <= '9')
-        return true;
+        return TRUE;
     else
-        return false;
+        return FALSE;
 }
 
 int IsCharIdent (char cChar)
@@ -1066,9 +1068,9 @@ int IsCharIdent (char cChar)
         (cChar >= 'A' && cChar <= 'Z') ||
         (cChar >= 'a' && cChar <= 'z') ||
         cChar == '_')
-        return true;
+        return TRUE;
     else
-        return false;
+        return FALSE;
 }
 
 int IsCharDelimiter (char cChar)
@@ -1076,9 +1078,9 @@ int IsCharDelimiter (char cChar)
     if (cChar == ':' || cChar == ',' || cChar == '"' ||
         cChar == '[' || cChar == ']' || cChar == '{' ||
         cChar == '}' || IsCharWhitespace (cChar) || cChar == '\n')
-        return true;
+        return TRUE;
     else
-        return false;
+        return FALSE;
 }
 
 void TrimWhitespace (char * pstrString)
@@ -1119,66 +1121,66 @@ void TrimWhitespace (char * pstrString)
 int IsStringWhitespace (char * pstrString)
 {
     if (!pstrString)
-        return false;
+        return FALSE;
 
     if (strlen (pstrString) == 0)
-        return true;
+        return TRUE;
 
     for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
          ++iCurrCharIndex)
         if (!IsCharWhitespace (pstrString[iCurrCharIndex]) &&
             pstrString[iCurrCharIndex != '\n'])
-            return false;
-    return true;
+            return FALSE;
+    return TRUE;
 }
 
 int IsStringIdent (char * pstrString)
 {
     if (!pstrString)
-        return false;
+        return FALSE;
 
     if (strlen(pstrString) == 0)
-        return false;
+        return FALSE;
 
     if (pstrString[0] >= '0' && pstrString[0] <= '9')
-        return false;
+        return FALSE;
 
     for (unsigned int iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString);
          ++iCurrCharIndex)
         if (!IsCharIdent(pstrString[iCurrCharIndex]))
-            return false;
-    return true;
+            return FALSE;
+    return TRUE;
 }
 
 int IsStringInteger (char * pstrString)
 {
     if (!pstrString)
-        return false;
+        return FALSE;
 
     if (strlen(pstrString) == 0)
-        return false;
+        return FALSE;
 
     unsigned int iCurrCharIndex;
 
     for (iCurrCharIndex = 0; iCurrCharIndex < strlen (pstrString); ++iCurrCharIndex)
         if (!IsCharNumeric (pstrString[iCurrCharIndex]) && !(pstrString[iCurrCharIndex] == '-'))
-            return false;
+            return FALSE;
 
     for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++iCurrCharIndex)
         if (pstrString[iCurrCharIndex] == '-')
-            return false;
+            return FALSE;
 
-    return true;
+    return TRUE;
 }
 
 
 int IsStringFloat(char * pstrString)
 {
     if (!pstrString)
-        return false;
+        return FALSE;
 
     if (strlen (pstrString) == 0)
-        return false;
+        return FALSE;
 
     unsigned int iCurrCharIndex;
 
@@ -1186,7 +1188,7 @@ int IsStringFloat(char * pstrString)
         if (!IsCharNumeric (pstrString[iCurrCharIndex]) &&
             !(pstrString[iCurrCharIndex] == '.') &&
             !(pstrString[iCurrCharIndex] == '-'))
-            return false;
+            return FALSE;
 
     int iRadixPointFound = 0;
 
@@ -1195,7 +1197,7 @@ int IsStringFloat(char * pstrString)
         if (pstrString[iCurrCharIndex] == '.')
         {
             if (iRadixPointFound)
-                return false;
+                return FALSE;
             else
                 iRadixPointFound = 1;
         }
@@ -1203,12 +1205,12 @@ int IsStringFloat(char * pstrString)
 
     for (iCurrCharIndex = 1; iCurrCharIndex < strlen (pstrString); ++iCurrCharIndex)
         if (pstrString[iCurrCharIndex] == '-')
-            return false;
+            return FALSE;
 
     if (iRadixPointFound)
-        return true;
+        return TRUE;
     else
-        return false;
+        return FALSE;
 }
 
 
@@ -1231,7 +1233,7 @@ Token GetNextToken ()
 
     if (g_Lexer.iCurrLexState != LEX_STATE_IN_STRING)
     {
-        while (true)
+        while (TRUE)
         {
             if (!IsCharWhitespace(g_ppstrSourceCode[g_Lexer.iCurrSourceLine][g_Lexer.iIndex0]))
                 break;
@@ -1242,7 +1244,7 @@ Token GetNextToken ()
 
     g_Lexer.iIndex1 = g_Lexer.iIndex0;
 
-    while (true)
+    while (TRUE)
     {
         if (g_Lexer.iCurrLexState == LEX_STATE_IN_STRING)
         {
@@ -1435,7 +1437,7 @@ void Exit ()
     exit (0);
 }
 
-void ExitOnError (const char * pstrErrorMssg)
+void ExitOnError (char * pstrErrorMssg)
 {
     printf ("Fatal Error: %s.\n", pstrErrorMssg);
 

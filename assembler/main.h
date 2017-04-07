@@ -271,7 +271,7 @@ ScriptHeader;
 typedef struct _LinkedListNode
 {
     void * pData;
-    _LinkedListNode * pNext;
+    struct _LinkedListNode * pNext;
 }
 LinkedListNode;
 

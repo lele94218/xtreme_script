@@ -13,6 +13,9 @@
 #include <math.h>
 #include <sys/select.h>
 
+#define TRUE 1
+#define FALSE 0
+
 /* File I/O */
 #define EXEC_FILE_EXT               ".XSE"
 #define XSE_ID_STRING               "XSE0"
@@ -517,7 +520,7 @@ int LoadScript(char * pstrFilename)
 /* Runs the currenty load script until a key is pressed or the script exits. */
 void RunScript()
 {
-    int iExitExecLoop = false;
+    int iExitExecLoop = FALSE;
 
     while (!kbhit())
     {
@@ -525,7 +528,7 @@ void RunScript()
         {
             if (GetCurrTime() >= g_Script.iPauseEndTime)
             {
-                g_Script.iIsPaused = false;
+                g_Script.iIsPaused = FALSE;
             }
             else
             {
@@ -826,7 +829,7 @@ void RunScript()
                 
                 int iTargetIndex = ResolveOpAsInstrIndex(2);
                 
-                int iJump = false;
+                int iJump = FALSE;
                 
                 switch (iOpcode) {
                     case INSTR_JE:
@@ -834,17 +837,17 @@ void RunScript()
                         switch (Op0.iType) {
                             case OP_TYPE_INT:
                                 if (Op0.iIntLiteral == Op1.iIntLiteral)
-                                    iJump = true;
+                                    iJump = TRUE;
                                 break;
                             
                             case OP_TYPE_FLOAT:
                                 if (Op0.fFloatLiteral == Op1.fFloatLiteral)
-                                    iJump = true;
+                                    iJump = TRUE;
                                 break;
                                 
                             case OP_TYPE_STRING:
                                 if (strcmp(Op0.pstrStringLiteral, Op1.pstrStringLiteral) == 0)
-                                    iJump = true;
+                                    iJump = TRUE;
                                 break;
                         }
                         break;
@@ -855,17 +858,17 @@ void RunScript()
                         switch (Op0.iType) {
                             case OP_TYPE_INT:
                                 if (Op0.iIntLiteral != Op1.iIntLiteral)
-                                    iJump = true;
+                                    iJump = TRUE;
                                 break;
                                 
                             case OP_TYPE_FLOAT:
                                 if (Op0.fFloatLiteral != Op1.fFloatLiteral)
-                                    iJump = true;
+                                    iJump = TRUE;
                                 break;
                                 
                             case OP_TYPE_STRING:
                                 if (strcmp(Op0.pstrStringLiteral, Op1.pstrStringLiteral) != 0)
-                                    iJump = true;
+                                    iJump = TRUE;
                                 break;
                         }
                         break;
@@ -876,12 +879,12 @@ void RunScript()
                         if (Op0.iType == OP_TYPE_INT)
                         {
                             if (Op0.iIntLiteral > Op1.iIntLiteral)
-                                iJump = true;
+                                iJump = TRUE;
                         }
                         else
                         {
                             if (Op0.fFloatLiteral > Op1.fFloatLiteral)
-                                iJump = true;
+                                iJump = TRUE;
                         }
                         break;
                     }
@@ -891,12 +894,12 @@ void RunScript()
                         if (Op0.iType == OP_TYPE_INT)
                         {
                             if (Op0.iIntLiteral < Op1.iIntLiteral)
-                                iJump = true;
+                                iJump = TRUE;
                         }
                         else
                         {
                             if (Op0.fFloatLiteral < Op1.fFloatLiteral)
-                                iJump = true;
+                                iJump = TRUE;
                         }
                         break;
                     }
@@ -906,12 +909,12 @@ void RunScript()
                         if (Op0.iType == OP_TYPE_INT)
                         {
                             if (Op0.iIntLiteral >= Op1.iIntLiteral)
-                                iJump = true;
+                                iJump = TRUE;
                         }
                         else
                         {
                             if (Op0.fFloatLiteral >= Op1.fFloatLiteral)
-                                iJump = true;
+                                iJump = TRUE;
                         }
                         break;
                     }
@@ -921,12 +924,12 @@ void RunScript()
                         if (Op0.iType == OP_TYPE_INT)
                         {
                             if (Op0.iIntLiteral <= Op1.iIntLiteral)
-                                iJump = true;
+                                iJump = TRUE;
                         }
                         else
                         {
                             if (Op0.fFloatLiteral <= Op1.fFloatLiteral)
-                                iJump = true;
+                                iJump = TRUE;
                         }
                         break;
                     }
@@ -941,11 +944,11 @@ void RunScript()
                 if (iJump)
                 {
                     g_Script.InstrStream.iCurrInstr = iTargetIndex;
-                    printf("(True)");
+                    printf("(TRUE)");
                 }
                 else
                 {
-                    printf("(False)");
+                    printf("(FALSE)");
                 }
                 break;
             }
@@ -1044,7 +1047,7 @@ void RunScript()
                 g_Script.iPauseEndTime = GetCurrTime() + iPauseDuration;
                 
                 /* Pause the script */
-                g_Script.iIsPaused = true;
+                g_Script.iIsPaused = TRUE;
                 
                 PrintOpValue(0);
                 break;
@@ -1056,7 +1059,7 @@ void RunScript()
                 
                 int iExitCode = ExitCode.iIntLiteral;
                 
-                iExitExecLoop = true;
+                iExitExecLoop = TRUE;
                 
                 PrintOpValue(0);
                 break;
@@ -1096,7 +1099,7 @@ void ResetScript()
     }
 
     /* Unpause the script */
-    g_Script.iIsPaused = false;
+    g_Script.iIsPaused = FALSE;
 
     /* Allocate space for the globals */
     PushFrame(g_Script.iGlobalDataSize);
