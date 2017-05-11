@@ -24,3 +24,8 @@ $Blibrcc$A:	$(RCCOBJS)
 
 $Balloc$O:	src/alloc.c;	$(CC) $(CFLAGS) -c -Isrc -o $@ src/alloc.c
 $Bmain$O:	src/main.c;	$(CC) $(CFLAGS) -c -Isrc -o $@ src/main.c
+
+clean:
+		$(RM) $B*$O
+		$(RM) $Brcc$E
+		$(RM) $B*.a

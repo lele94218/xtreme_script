@@ -4,7 +4,7 @@
 #include <limits.h>
 #include <string.h>
 
-#define PURIFY
+// #define PURIFY
 
 #define NELEMS(a) ((int)(sizeof(a) / sizeof((a)[0])))
 #undef roundup
