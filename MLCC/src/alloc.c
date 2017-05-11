@@ -1,4 +1,5 @@
 #include "c.h"
+
 struct block
 {
     struct block * next;
@@ -14,6 +15,12 @@ union align
     int (*f)(void);
 };
 
+union header
+{
+	struct block b;
+	union align a;
+};
+
 #ifdef PURIFY
 union header *arena[3];
 
@@ -24,7 +31,7 @@ void *allocate(unsigned long n, unsigned a)
 	assert(a < NELEMS(arena));
 	if (new == NULL)
 	{
-		error("insufficient memory\n");
+		printf("insufficient memory\n");
 		exit(1);
 	}
 	new->b.next = (void *)arena[a];
