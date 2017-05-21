@@ -28,9 +28,9 @@ struct symbol
 	int scope;		// constants, labels, global, param, local. E.g. local declaration in Level k, has scope local + k.
 	Coordinate src; // pinpoint the symbol
 	Symbol up;		// symbol list
-	List uses;		// track for symbols
+	// List uses;		// track for symbols
 	int sclass;		// extend storage class. E.g. auto, register, static, extern.
-	Type type;		// type information
+	// Type type;		// type information
 	float ref;		// referenced times. see 10.3
 	union {
 

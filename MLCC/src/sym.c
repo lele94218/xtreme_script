@@ -45,3 +45,8 @@ Table table(Table tp, int level)
     }
     return new;
 }
+
+void foreach(Table tp, int lev, void (*apply)(Symbol, void *), void *cl)
+{
+    
+}

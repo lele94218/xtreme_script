@@ -7,8 +7,17 @@ struct str
     int c;
 };
 
+void fun(int num)
+{
+    printf("%d\n", num);
+}
+
 int main(int argc, char * argv[])
 {  
-    struct str a = {100};
-    printf("%d %d %d\n", a.a, a.b, a.c);
+    void (*fun_pointer)(int);
+    fun_pointer = fun;
+    printf("%p %p %p\n", fun_pointer, *fun_pointer, &fun_pointer);
+    printf("%p %p %p\n", fun, *fun, &fun);
+    (*fun_pointer)(200);
+    return 0;
 }
