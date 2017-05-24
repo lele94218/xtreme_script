@@ -33,7 +33,11 @@ struct symbol
 	// Type type;		// type information
 	float ref;		// referenced times. see 10.3
 	union {
-
+		struct
+		{
+			int label;
+			Symbol equatedto;
+		} l;
 	} u; // additional information
 		 // Xsymbol x;
 };
@@ -61,6 +65,8 @@ extern Table globals;
 extern Table identifiers;
 extern Table labels;
 extern Table types;
+extern Coordinate src;
+extern int level;
 
 extern void *allocate(unsigned long n, unsigned a);
 extern void deallocate(unsigned a);
