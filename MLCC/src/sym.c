@@ -146,4 +146,53 @@ Symbol findlabel(int lab)
     p->sym.scope = LABELS;
     p->sym.up = labels->all;
     labels->all = &p->sym;
+    p->link = labels->buckets[h];
+	labels->buckets[h] = p;
+	p->sym.generated = 1;
+	p->sym.u.l.label = lab;
+	(*IR->defsymbol)(&p->sym);
+	return &p->sym;
+}
+
+Symbol constant(Type ty, Value v) {
+	struct entry *p;
+	unsigned h = v.u&(HASHSIZE-1);
+	static union { int x; char endian; } little = { 1 };
+
+	ty = unqual(ty);
+	for (p = constants->buckets[h]; p; p = p->link)
+		if (eqtype(ty, p->sym.type, 1))
+			switch (ty->op) {
+			case INT:      if (equalp(i)) return &p->sym; break;
+			case UNSIGNED: if (equalp(u)) return &p->sym; break;
+			case FLOAT:
+				if (v.d == 0.0) {
+					float z1 = v.d, z2 = p->sym.u.c.v.d;
+					char *b1 = (char *)&z1, *b2 = (char *)&z2;
+					if (z1 == z2
+					&& (!little.endian && b1[0] == b2[0]
+					||   little.endian && b1[sizeof (z1)-1] == b2[sizeof (z2)-1]))
+						return &p->sym;
+				} else if (equalp(d))
+					return &p->sym;
+				break;
+			case FUNCTION: if (equalp(g)) return &p->sym; break;
+			case ARRAY:
+			case POINTER:  if (equalp(p)) return &p->sym; break;
+			default: assert(0);
+			}
+	NEW0(p, PERM);
+	p->sym.name = vtoa(ty, v);
+	p->sym.scope = CONSTANTS;
+	p->sym.type = ty;
+	p->sym.sclass = STATIC;
+	p->sym.u.c.v = v;
+	p->link = constants->buckets[h];
+	p->sym.up = constants->all;
+	constants->all = &p->sym;
+	constants->buckets[h] = p;
+	if (ty->u.sym && !ty->u.sym->addressed)
+		(*IR->defsymbol)(&p->sym);
+	p->sym.defined = 1;
+	return &p->sym;
 }
