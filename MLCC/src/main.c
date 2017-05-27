@@ -1,23 +1,11 @@
 #include "c.h"
 
-struct str
-{
-    int a;
-    int b;
-    int c;
-};
-
-void fun(int num)
-{
-    printf("%d\n", num);
-}
-
 int main(int argc, char * argv[])
 {  
-    void (*fun_pointer)(int);
-    fun_pointer = fun;
-    printf("%p %p %p\n", fun_pointer, *fun_pointer, &fun_pointer);
-    printf("%p %p %p\n", fun, *fun, &fun);
-    (*fun_pointer)(200);
+    assert(freopen("build/input.in", "r", stdin) != NULL);
+    char string[100];
+    int size = fread(&string[0], 1, 100000, stdin);
+    string[size] = '\0';
+    printf("%d: %s\n", size, string);
     return 0;
 }
