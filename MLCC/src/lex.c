@@ -155,6 +155,7 @@ int gettok(void)
             rcp++;
         if (limit - rcp < MAXTOKEN)
         {
+            /* in case token may be splitted */
             cp = rcp;
             fillbuf();
             rcp = cp;
@@ -173,6 +174,7 @@ int gettok(void)
                 int c = 0;
                 for (rcp++; *rcp != '/' || c != '*';)
                 {
+                    /* exit when c == '*' and rcp == '/' */
                     if (map[*rcp] & NEWLINE)
                     {
                         if (rcp < limit)
@@ -194,6 +196,126 @@ int gettok(void)
                 continue;
             }
             return '/';
+        case '<':
+            if (*rcp == '=')
+                return cp++, LEQ;
+            if (*rcp == '<')
+                return cp++, LSHIFT;
+            return '<';
+        case '>':
+            if (*rcp == '=')
+                return cp++, GEQ;
+            if (*rcp == '>')
+                return cp++, RSHIFT;
+            return '>';
+        case '-':
+            if (*rcp == '>')
+                return cp++, DEREF;
+            if (*rcp == '-')
+                return cp++, DECR;
+            return '-';
+        case '=':
+            return *rcp == '=' ? cp++, EQL : '=';
+        case '!':
+            return *rcp == '=' ? cp++, NEQ : '!';
+        case '|':
+            return *rcp == '|' ? cp++, OROR : '|';
+        case '&':
+            return *rcp == '&' ? cp++, ANDAND : '&';
+        case '+':
+            return *rcp == '+' ? cp++, INCR : '+';
+        case ';':
+        case ',':
+        case ':':
+        case '*':
+        case '~':
+        case '%':
+        case '^':
+        case '?':
+        case '[':
+        case ']':
+        case '{':
+        case '}':
+        case '(':
+        case ')':
+            return rcp[-1];
+        case '\n':
+        case '\v':
+        case '\r':
+        case '\f':
+            nextline();
+            if (cp == limit)
+            {
+                tsym = NULL;
+                return EOI;
+            }
+            continue;
+        case 'i':
+            if (rcp[0] == 'f' && !(map[rcp[1]] & (DIGIT | LETTER)))
+            {
+                /* "if" */
+                cp = rcp + 1;
+                return IF;
+            }
+            if (rcp[0] == 'n' && rcp[1] == 't' && !(map[rcp[2]] & (DIGIT | LETTER)))
+            {
+                /* "int" */
+                cp = rcp + 2;
+                tsym = inttype->u.sym; //TODO
+                return INT;
+            }
+            goto id;
+        case 'h':
+        case 'j':
+        case 'k':
+        case 'm':
+        case 'n':
+        case 'o':
+        case 'p':
+        case 'q':
+        case 'x':
+        case 'y':
+        case 'z':
+        case 'A':
+        case 'B':
+        case 'C':
+        case 'D':
+        case 'E':
+        case 'F':
+        case 'G':
+        case 'H':
+        case 'I':
+        case 'J':
+        case 'K':
+        case 'M':
+        case 'N':
+        case 'O':
+        case 'P':
+        case 'Q':
+        case 'R':
+        case 'S':
+        case 'T':
+        case 'U':
+        case 'V':
+        case 'W':
+        case 'X':
+        case 'Y':
+        case 'Z':
+        id:
+            if (limit - rcp < MAXLINE)
+            {
+                cp = rcp - 1;
+                fillbuf();
+                rcp = ++cp;
+            }
+            assert(cp == rcp);
+            token = (char *)rcp - 1;
+            while (map[*rcp] & (DIGIT | LETTER))
+                rcp++;
+            token = stringn(token, (char *)rcp - token);
+            tsym = lookup(token, identifiers); //TODO
+            cp = rcp;
+            return ID;
         default:
             if ((map[cp[-1]] & BLANK) == 0)
                 if (cp[-1] < ' ' || cp[-1] >= 0177)
@@ -201,5 +323,95 @@ int gettok(void)
                 else
                     printf("illegal character `%c'\n", cp[-1]);
         }
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
+    {
+        unsigned long n = 0;
+        if (limit - rcp < MAXLINE)
+        {
+            cp = rcp - 1;
+            fillbuf();
+            rcp = ++cp;
+        }
+        assert(cp == rcp);
+        token = (char *)rcp - 1;
+        if (*token == '0' && (*rcp == 'x' || *rcp == 'X'))
+        {
+            /* hex */
+            int d, overflow = 0;
+            while (*++rcp)
+            {
+                if (map[*rcp] & DIGIT)
+                    d = *rcp - '0';
+                else if (*rcp >= 'a' && *rcp <= 'f')
+                    d = *rcp - 'a' + 10;
+                else if (*rcp >= 'A' && *rcp <= 'F')
+                    d = *rcp - 'A' + 10;
+                else
+                    break;
+                if (n & ~(~0UL >> 4))
+                    overflow = 1;
+                else
+                    n = (n << 4) + d;
+            }
+            if ((char *)rcp - token <= 2)
+                error("invalid hexadecimal constant `%S'\n", token, (char *)rcp - token);
+            cp = rcp;
+            tsym = icon(n, overflow, 16);
+        }
+        else if (*token == '0')
+        {
+            /* oct */
+            int err = 0, overflow = 0;
+            for (; map[*rcp] & DIGIT; rcp++)
+            {
+                if (*rcp == '8' || *rcp == '9')
+                    err = 1;
+                if (n & ~(~0UL >> 3))
+                    overflow = 1;
+                else
+                    n = (n << 3) + (*rcp - '0');
+            }
+            if (*rcp == '.' || *rcp == 'e' || *rcp == 'E')
+            {
+                cp = rcp;
+                tsym = fcon();
+                return FCON;
+            }
+            cp = rcp;
+            tsym = icon(n, overflow, 8);
+            if (err)
+                error("invalid octal constant `%S'\n", token, (char *)cp - token);
+        }
+        else
+        {
+            int overflow = 0;
+            for (n = *token - '0'; map[*rcp] & DIGIT;)
+            {
+                int d = *rcp++ - '0';
+                if (n > (ULONG_MAX - d) / 10)
+                    overflow = 1;
+                else
+                    n = 10 * n + d;
+            }
+            if (*rcp == '.' || *rcp == 'e' || *rcp == 'E')
+            {
+                cp = rcp;
+                tsym = fcon();
+                return FCON;
+            }
+            cp = rcp;
+            tsym = icon(n, overflow, 10);
+        }
+        return ICON;
+    }
     }
 }
