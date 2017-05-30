@@ -363,7 +363,7 @@ int gettok(void)
                     n = (n << 4) + d;
             }
             if ((char *)rcp - token <= 2)
-                error("invalid hexadecimal constant `%S'\n", token, (char *)rcp - token);
+                printf("invalid hexadecimal constant `%S'\n", token, (char *)rcp - token);
             cp = rcp;
             tsym = icon(n, overflow, 16);
         }
@@ -389,7 +389,7 @@ int gettok(void)
             cp = rcp;
             tsym = icon(n, overflow, 8);
             if (err)
-                error("invalid octal constant `%S'\n", token, (char *)cp - token);
+                printf("invalid octal constant `%S'\n", token, (char *)cp - token);
         }
         else
         {
