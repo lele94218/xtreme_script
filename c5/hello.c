@@ -1,13 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
-
+struct af {
+    int p;
+};
 int main()
 {
-    int poolsize = 256 * 1024;
-    int *p = malloc(poolsize);
-    printf("%p\n", p);
-    p = (int *)((int)p + poolsize);
-    *(--p) = 10;
-    *(--p) = 10;
-    printf("done!\n");
+    struct af *a = NULL;
+    struct af *b = a;
+    b = malloc(sizeof(struct af));
+    b->p = 100;
+    printf("%d\n", a->p);
 }
